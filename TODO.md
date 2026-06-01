@@ -69,29 +69,29 @@ Focus: improve organization and editing ergonomics.
 
 Focus: turn `memex` into a more complete knowledge-base tool.
 
-- [ ] Add indexed backlinks and indexed full-text search.
+- [x] Add indexed backlinks and indexed full-text search.
   - Avoid rescanning all notes for common queries.
-- [ ] Add unlinked mentions.
+- [x] Add unlinked mentions.
   - Find note titles referenced in plain text.
-- [ ] Add link autocomplete while editing.
+- [x] Add link autocomplete while editing.
   - Offer note-title completion for `[[...]]`.
-- [ ] Add transclusions.
+- [x] Add transclusions.
   - Support embeds like `![[Note]]`.
-- [ ] Improve markdown coverage further.
-  - Tables.
-  - Better fenced code block rendering.
-  - Better blockquote and callout presentation.
-- [ ] Add a command palette for common actions.
-- [ ] Add saved searches.
-- [ ] Add a configuration file.
-  - Keybindings.
-  - Theme options.
-  - Default mode and startup behavior.
-  - Trash and template paths.
-- [ ] Add richer metadata views.
-  - Backlinks pane.
-  - Tags pane.
-  - Note info pane.
+- [x] Improve markdown coverage further.
+  - [x] Tables.
+  - [x] Better fenced code block rendering.
+  - [x] Better blockquote and callout presentation.
+- [x] Add a command palette for common actions.
+- [x] Add saved searches.
+- [x] Add a configuration file.
+  - [x] Keybindings.
+  - [x] Theme options.
+  - [x] Default mode and startup behavior.
+  - [x] Trash and template paths.
+- [x] Add richer metadata views.
+  - [x] Backlinks pane.
+  - [x] Tags pane.
+  - [x] Note info pane.
 - [ ] Evaluate whether a graph view fits the project.
   - This is optional and may conflict with the small-TUI design goal.
 
@@ -104,8 +104,8 @@ Focus: turn `memex` into a more complete knowledge-base tool.
 5. [x] Tag support
 6. [x] UI state persistence
 7. [x] Folder tree sidebar
-8. [ ] Link autocomplete
-9. [ ] Indexed search and backlinks
+8. [x] Link autocomplete
+9. [x] Indexed search and backlinks
 
 ## Minimal High-Value Target
 

@@ -47,7 +47,13 @@
 #define MAX_HISTORY 128
 #define MAX_RECENT 12
 #define MAX_UNDO 32
+#define MAX_SAVED_SEARCHES 32
+#define MAX_MENTIONS 256
+#define MAX_INFO_LINES 32
+#define MAX_COMMANDS 20
 #define STATE_FILE ".memex-state"
+#define CONFIG_FILE ".memexrc"
+#define SAVED_SEARCH_FILE ".memex-searches"
 #define TRASH_DIR ".trash"
 #define TEMPLATE_DIR ".templates"
 #define DEFAULT_TEMPLATE "default.md"
@@ -103,6 +109,17 @@ typedef struct {
 } SearchResult;
 
 typedef struct {
+    char *raw_text;
+    char *plain_text;
+    int outbound[MAX_LINKS];
+    int outbound_count;
+    int backlinks[MAX_BACKLINKS];
+    int backlink_count;
+    int mentions[MAX_MENTIONS];
+    int mention_count;
+} NoteIndex;
+
+typedef struct {
     char name[MAX_TITLE];
     int count;
 } TagInfo;
@@ -127,12 +144,26 @@ typedef struct {
     int line;
 } HistoryEntry;
 
+typedef struct {
+    char name[MAX_TITLE];
+    char query[MAX_FILTER];
+} SavedSearch;
+
+typedef struct {
+    const char *label;
+    int action;
+} CommandEntry;
+
 enum {
     PANEL_NOTE = 0,
     PANEL_BACKLINKS = 1,
     PANEL_SEARCH = 2,
     PANEL_OUTLINE = 3,
-    PANEL_TAGS = 4
+    PANEL_TAGS = 4,
+    PANEL_MENTIONS = 5,
+    PANEL_INFO = 6,
+    PANEL_SAVED = 7,
+    PANEL_COMMANDS = 8
 };
 
 enum {
@@ -169,8 +200,11 @@ static int rendered_line_count = 0;
 static int rendered_width = -1;
 static SearchResult search_results[MAX_RESULTS];
 static int search_result_count = 0;
+static NoteIndex note_index[MAX_NOTES];
 static int backlink_indices[MAX_BACKLINKS];
 static int backlink_count = 0;
+static int mention_indices[MAX_MENTIONS];
+static int mention_count = 0;
 static TagInfo tags[MAX_TAGS];
 static int tag_count = 0;
 static int selected_tag = 0;
@@ -189,10 +223,44 @@ static int recent_note_count = 0;
 static int current_panel = PANEL_NOTE;
 static int panel_selected = 0;
 static int panel_scroll = 0;
+static SavedSearch saved_searches[MAX_SAVED_SEARCHES];
+static int saved_search_count = 0;
+static int selected_saved_search = 0;
+static char current_search_query[MAX_FILTER];
+static int info_line_count = 0;
+static char info_lines[MAX_INFO_LINES][MAX_LINE + 1];
+static int selected_command = 0;
 static int show_sidebar = 1;
 static int read_mode = 1;
 static int running = 1;
 static char last_open_title[MAX_TITLE];
+static char startup_mode[MAX_TITLE] = "last";
+static char theme_name[MAX_TITLE] = "plain";
+static char trash_dir_name[MAX_TITLE] = TRASH_DIR;
+static char template_dir_name[MAX_TITLE] = TEMPLATE_DIR;
+static int startup_applied = 0;
+
+static int key_new_note = 'n';
+static int key_template_note = 't';
+static int key_daily_note = 'D';
+static int key_edit_note = 'e';
+static int key_delete_note = 'd';
+static int key_rename_note = 'r';
+static int key_filter_titles = '/';
+static int key_full_text_search = 'f';
+static int key_backlinks = 'b';
+static int key_mentions = 'u';
+static int key_outline = 'o';
+static int key_tags = 'g';
+static int key_saved_searches = 'v';
+static int key_command_palette = 'p';
+static int key_note_info = 'i';
+static int key_toggle_mode = 'm';
+static int key_toggle_sidebar = 's';
+static int key_cycle_sort = 'S';
+static int key_history_back = '[';
+static int key_history_forward = ']';
+static int key_save_search = 'A';
 
 static char edit_lines[MAX_LINES][MAX_LINE + 1];
 static int edit_line_count = 0;
@@ -207,9 +275,12 @@ static char *undo_stack[MAX_UNDO];
 static int undo_count = 0;
 static char *redo_stack[MAX_UNDO];
 static int redo_count = 0;
+static char autocomplete_prefix[MAX_TITLE];
+static int autocomplete_last_match = -1;
 
 static void trim_copy(const char *src, char *dst, size_t dst_size);
 static int find_note_by_target(const char *target);
+static void build_note_indices(void);
 
 static void copy_string(char *dst, size_t dst_size, const char *src)
 {
@@ -251,6 +322,22 @@ static void set_status(const char *msg)
     copy_string(status_msg, sizeof(status_msg), msg);
 }
 
+static int is_word_boundary_char(int ch)
+{
+    return ch == '\0' || isspace((unsigned char)ch) || ispunct((unsigned char)ch);
+}
+
+static int case_equals(const char *a, const char *b)
+{
+    while (*a && *b) {
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b))
+            return 0;
+        a++;
+        b++;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
 static int has_md_suffix(const char *name)
 {
     size_t n = strlen(name);
@@ -272,6 +359,41 @@ static int case_contains(const char *s, const char *needle)
                 break;
         }
         if (needle[j] == '\0')
+            return 1;
+    }
+    return 0;
+}
+
+static int case_starts_with(const char *s, const char *prefix)
+{
+    int i;
+
+    for (i = 0; prefix[i]; i++) {
+        if (s[i] == '\0')
+            return 0;
+        if (tolower((unsigned char)s[i]) != tolower((unsigned char)prefix[i]))
+            return 0;
+    }
+    return 1;
+}
+
+static int text_contains_phrase(const char *s, const char *needle)
+{
+    int i, j;
+    char a, b;
+
+    if (needle[0] == '\0')
+        return 0;
+    for (i = 0; s[i]; i++) {
+        if (i > 0 && !is_word_boundary_char((unsigned char)s[i - 1]))
+            continue;
+        for (j = 0; needle[j]; j++) {
+            a = (char)tolower((unsigned char)s[i + j]);
+            b = (char)tolower((unsigned char)needle[j]);
+            if (a != b || s[i + j] == '\0')
+                break;
+        }
+        if (needle[j] == '\0' && is_word_boundary_char((unsigned char)s[i + j]))
             return 1;
     }
     return 0;
@@ -731,6 +853,38 @@ static char *xstrdup(const char *s)
     return p;
 }
 
+static void free_note_indices(void)
+{
+    int i;
+
+    for (i = 0; i < MAX_NOTES; i++) {
+        free(note_index[i].raw_text);
+        free(note_index[i].plain_text);
+        note_index[i].raw_text = NULL;
+        note_index[i].plain_text = NULL;
+        note_index[i].outbound_count = 0;
+        note_index[i].backlink_count = 0;
+        note_index[i].mention_count = 0;
+    }
+}
+
+static void append_heap_line(char **text, const char *line)
+{
+    size_t old_len = 0;
+    size_t add_len = strlen(line);
+    char *buf;
+
+    if (*text)
+        old_len = strlen(*text);
+    buf = (char *)realloc(*text, old_len + add_len + 2);
+    if (!buf)
+        return;
+    *text = buf;
+    memcpy(buf + old_len, line, add_len);
+    buf[old_len + add_len] = '\n';
+    buf[old_len + add_len + 1] = '\0';
+}
+
 static int tag_cmp(const void *a, const void *b)
 {
     const TagInfo *ta = (const TagInfo *)a;
@@ -1132,7 +1286,8 @@ static void scan_notes_recursive(const char *rel_dir)
 
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
-        if (strcmp(ent->d_name, TRASH_DIR) == 0 || strcmp(ent->d_name, TEMPLATE_DIR) == 0)
+        if (strcmp(ent->d_name, trash_dir_name) == 0
+            || strcmp(ent->d_name, template_dir_name) == 0)
             continue;
         if (ent->d_name[0] == '.' && !has_md_suffix(ent->d_name))
             continue;
@@ -1308,8 +1463,241 @@ static void load_notes(void)
             recent_notes[recent_note_count++] = i;
     }
     build_sidebar();
+    build_note_indices();
     if (current_note >= 0)
         selected_note = visible_position_for_note(current_note);
+}
+
+static void set_keybinding(const char *name, const char *value)
+{
+    int key = value[0];
+
+    if (case_equals(value, "space"))
+        key = ' ';
+    else if (case_equals(value, "slash"))
+        key = '/';
+    else if (case_equals(value, "tab"))
+        key = '\t';
+    if (strcmp(name, "key_new") == 0)
+        key_new_note = key;
+    else if (strcmp(name, "key_template") == 0)
+        key_template_note = key;
+    else if (strcmp(name, "key_daily") == 0)
+        key_daily_note = key;
+    else if (strcmp(name, "key_edit") == 0)
+        key_edit_note = key;
+    else if (strcmp(name, "key_delete") == 0)
+        key_delete_note = key;
+    else if (strcmp(name, "key_rename") == 0)
+        key_rename_note = key;
+    else if (strcmp(name, "key_filter") == 0)
+        key_filter_titles = key;
+    else if (strcmp(name, "key_search") == 0)
+        key_full_text_search = key;
+    else if (strcmp(name, "key_backlinks") == 0)
+        key_backlinks = key;
+    else if (strcmp(name, "key_mentions") == 0)
+        key_mentions = key;
+    else if (strcmp(name, "key_outline") == 0)
+        key_outline = key;
+    else if (strcmp(name, "key_tags") == 0)
+        key_tags = key;
+    else if (strcmp(name, "key_saved") == 0)
+        key_saved_searches = key;
+    else if (strcmp(name, "key_palette") == 0)
+        key_command_palette = key;
+    else if (strcmp(name, "key_info") == 0)
+        key_note_info = key;
+}
+
+static void load_config(void)
+{
+    char path[PATH_MAX];
+    FILE *fp;
+    char buf[MAX_LINE + 2];
+
+    make_special_path(path, sizeof(path), CONFIG_FILE);
+    fp = fopen(path, "r");
+    if (!fp)
+        return;
+    while (fgets(buf, sizeof(buf), fp)) {
+        char key[MAX_TITLE];
+        char value[MAX_LINE + 1];
+        char *eq;
+
+        buf[strcspn(buf, "\r\n")] = '\0';
+        if (buf[0] == '#' || buf[0] == '\0')
+            continue;
+        eq = strchr(buf, '=');
+        if (!eq)
+            continue;
+        *eq = '\0';
+        trim_copy(buf, key, sizeof(key));
+        trim_copy(eq + 1, value, sizeof(value));
+        if (strcmp(key, "theme") == 0)
+            copy_string(theme_name, sizeof(theme_name), value);
+        else if (strcmp(key, "default_mode") == 0)
+            read_mode = case_equals(value, "write") ? 0 : 1;
+        else if (strcmp(key, "startup") == 0)
+            copy_string(startup_mode, sizeof(startup_mode), value);
+        else if (strcmp(key, "trash_dir") == 0 && value[0])
+            copy_string(trash_dir_name, sizeof(trash_dir_name), value);
+        else if (strcmp(key, "template_dir") == 0 && value[0])
+            copy_string(template_dir_name, sizeof(template_dir_name), value);
+        else
+            set_keybinding(key, value);
+    }
+    fclose(fp);
+}
+
+static void load_saved_searches(void)
+{
+    char path[PATH_MAX];
+    FILE *fp;
+    char buf[MAX_LINE + 2];
+
+    saved_search_count = 0;
+    make_special_path(path, sizeof(path), SAVED_SEARCH_FILE);
+    fp = fopen(path, "r");
+    if (!fp)
+        return;
+    while (fgets(buf, sizeof(buf), fp) && saved_search_count < MAX_SAVED_SEARCHES) {
+        char *sep;
+
+        buf[strcspn(buf, "\r\n")] = '\0';
+        if (buf[0] == '\0')
+            continue;
+        sep = strchr(buf, '|');
+        if (!sep)
+            continue;
+        *sep = '\0';
+        trim_copy(buf, saved_searches[saved_search_count].name,
+                  sizeof(saved_searches[saved_search_count].name));
+        trim_copy(sep + 1, saved_searches[saved_search_count].query,
+                  sizeof(saved_searches[saved_search_count].query));
+        if (saved_searches[saved_search_count].name[0]
+            && saved_searches[saved_search_count].query[0])
+            saved_search_count++;
+    }
+    fclose(fp);
+}
+
+static void save_saved_searches(void)
+{
+    char path[PATH_MAX];
+    FILE *fp;
+    int i;
+
+    make_special_path(path, sizeof(path), SAVED_SEARCH_FILE);
+    fp = fopen(path, "w");
+    if (!fp)
+        return;
+    for (i = 0; i < saved_search_count; i++)
+        fprintf(fp, "%s|%s\n", saved_searches[i].name, saved_searches[i].query);
+    fclose(fp);
+}
+
+static void note_index_add_unique(int *items, int *count, int max_count, int value)
+{
+    int i;
+
+    for (i = 0; i < *count; i++) {
+        if (items[i] == value)
+            return;
+    }
+    if (*count >= max_count)
+        return;
+    items[(*count)++] = value;
+}
+
+static void build_note_indices(void)
+{
+    int i, j;
+
+    free_note_indices();
+    for (i = 0; i < note_count; i++) {
+        FILE *fp;
+        char path[PATH_MAX];
+        char buf[MAX_LINE + 2];
+
+        make_path(path, sizeof(path), notes[i].file);
+        fp = fopen(path, "r");
+        if (!fp)
+            continue;
+        while (fgets(buf, sizeof(buf), fp)) {
+            const char *p = buf;
+            const char *end;
+            char raw[MAX_TITLE * 2];
+            char target[MAX_TITLE];
+            char heading[MAX_TITLE];
+            char label[MAX_TITLE];
+            char plain[MAX_LINE + 1];
+            int len;
+
+            buf[strcspn(buf, "\r\n")] = '\0';
+            append_heap_line(&note_index[i].raw_text, buf);
+            format_inline_markdown(buf, plain, sizeof(plain));
+            append_heap_line(&note_index[i].plain_text, plain[0] ? plain : buf);
+            while ((p = strstr(p, "[[")) != NULL) {
+                if (p > buf && p[-1] == '!')
+                    p += 2;
+                else
+                    p += 2;
+                end = strstr(p, "]]");
+                if (!end)
+                    break;
+                len = (int)(end - p);
+                if (len >= (int)sizeof(raw))
+                    len = (int)sizeof(raw) - 1;
+                memcpy(raw, p, (size_t)len);
+                raw[len] = '\0';
+                parse_wiki_link(raw, target, sizeof(target),
+                                heading, sizeof(heading),
+                                label, sizeof(label));
+                j = find_note_by_target(target);
+                if (j >= 0 && j != i)
+                    note_index_add_unique(note_index[i].outbound,
+                                          &note_index[i].outbound_count,
+                                          MAX_LINKS, j);
+                p = end + 2;
+            }
+        }
+        fclose(fp);
+    }
+
+    for (i = 0; i < note_count; i++) {
+        for (j = 0; j < note_index[i].outbound_count; j++) {
+            int target = note_index[i].outbound[j];
+
+            if (target >= 0 && target < note_count)
+                note_index_add_unique(note_index[target].backlinks,
+                                      &note_index[target].backlink_count,
+                                      MAX_BACKLINKS, i);
+        }
+    }
+
+    for (i = 0; i < note_count; i++) {
+        for (j = 0; j < note_count; j++) {
+            int linked = 0;
+            int k;
+
+            if (i == j || notes[j].title[0] == '\0')
+                continue;
+            if (!text_contains_phrase(note_index[i].plain_text ? note_index[i].plain_text : "",
+                                      notes[j].title))
+                continue;
+            for (k = 0; k < note_index[i].outbound_count; k++) {
+                if (note_index[i].outbound[k] == j) {
+                    linked = 1;
+                    break;
+                }
+            }
+            if (!linked)
+                note_index_add_unique(note_index[i].mentions,
+                                      &note_index[i].mention_count,
+                                      MAX_MENTIONS, j);
+        }
+    }
 }
 
 static void save_state(void)
@@ -1457,6 +1845,102 @@ static void add_wrapped_prefixed_line(const char *prefix, const char *text,
     }
 }
 
+static int parse_embed_target(const char *line, char *target, size_t target_size)
+{
+    const char *p = line;
+    const char *end;
+    char raw[MAX_TITLE * 2];
+    char heading[MAX_TITLE];
+    char label[MAX_TITLE];
+    int len;
+
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (p[0] != '!' || p[1] != '[' || p[2] != '[')
+        return 0;
+    p += 3;
+    end = strstr(p, "]]");
+    if (!end)
+        return 0;
+    len = (int)(end - p);
+    if (len >= (int)sizeof(raw))
+        len = (int)sizeof(raw) - 1;
+    memcpy(raw, p, (size_t)len);
+    raw[len] = '\0';
+    parse_wiki_link(raw, target, target_size, heading, sizeof(heading),
+                    label, sizeof(label));
+    return target[0] != '\0';
+}
+
+static int is_table_divider(const char *line)
+{
+    while (*line == ' ' || *line == '\t')
+        line++;
+    while (*line) {
+        if (*line != '|' && *line != '-' && *line != ':' && *line != ' ')
+            return 0;
+        line++;
+    }
+    return 1;
+}
+
+static void render_table_line(const char *line, int source_line, int link_index, int width)
+{
+    char formatted[MAX_LINE + 1];
+    char cell[MAX_LINE + 1];
+    const char *p = line;
+    const char *start;
+
+    formatted[0] = '\0';
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == '|')
+            p++;
+        start = p;
+        while (*p && *p != '|')
+            p++;
+        if (p > start) {
+            memcpy(cell, start, (size_t)(p - start));
+            cell[p - start] = '\0';
+            trim_copy(cell, cell, sizeof(cell));
+            if (formatted[0])
+                append_string(formatted, sizeof(formatted), " | ");
+            append_string(formatted, sizeof(formatted), cell);
+        }
+    }
+    add_wrapped_prefixed_line("| ", formatted, 2, A_BOLD, source_line, link_index, width);
+}
+
+static void render_embed_note(const char *target, int source_line, int link_index, int width)
+{
+    int idx = find_note_by_target(target);
+    char path[PATH_MAX];
+    FILE *fp;
+    char buf[MAX_LINE + 2];
+    char plain[MAX_LINE + 1];
+    int shown = 0;
+
+    add_wrapped_prefixed_line("> ", target, 2, A_BOLD, source_line, link_index, width);
+    if (idx < 0) {
+        add_wrapped_prefixed_line("  ", "(missing embed)", 2, A_DIM, source_line,
+                                  link_index, width);
+        return;
+    }
+    make_path(path, sizeof(path), notes[idx].file);
+    fp = fopen(path, "r");
+    if (!fp)
+        return;
+    while (fgets(buf, sizeof(buf), fp) && shown < 12) {
+        buf[strcspn(buf, "\r\n")] = '\0';
+        if (is_blank_line(buf))
+            continue;
+        format_inline_markdown(buf, plain, sizeof(plain));
+        add_wrapped_prefixed_line("  ", plain[0] ? plain : buf, 2, A_DIM,
+                                  source_line, link_index, width);
+        shown++;
+    }
+    fclose(fp);
+}
+
 static void render_note_cache(int width)
 {
     int i;
@@ -1470,6 +1954,7 @@ static void render_note_cache(int width)
     Heading temp_heading;
     int num_len;
     int attr;
+    char embed_target[MAX_TITLE];
 
     if (width <= 0 || current_note < 0)
         return;
@@ -1487,14 +1972,18 @@ static void render_note_cache(int width)
 
         while (*p == ' ' || *p == '\t')
             p++;
-        if (strcmp(p, "```") == 0) {
+        if (strncmp(p, "```", 3) == 0) {
             in_code_block = !in_code_block;
-            add_render_line("```", A_DIM, i, line_link);
+            add_wrapped_prefixed_line("", p, 0, A_DIM, i, line_link, width);
             continue;
         }
         if (in_code_block) {
             add_wrapped_prefixed_line("  ", view_lines[i], 2, A_DIM, i,
                                       line_link, width);
+            continue;
+        }
+        if (parse_embed_target(view_lines[i], embed_target, sizeof(embed_target))) {
+            render_embed_note(embed_target, i, line_link, width);
             continue;
         }
         if (is_blank_line(view_lines[i])) {
@@ -1514,6 +2003,16 @@ static void render_note_cache(int width)
                                       line_link, width);
             add_render_line("", A_NORMAL, i, line_link);
             continue;
+        }
+        if (strchr(view_lines[i], '|') && !is_table_divider(view_lines[i])) {
+            if (i + 1 < view_line_count && is_table_divider(view_lines[i + 1])) {
+                render_table_line(view_lines[i], i, line_link, width);
+                continue;
+            }
+            if (i > 0 && strchr(view_lines[i - 1], '|') && is_table_divider(view_lines[i - 1])) {
+                render_table_line(view_lines[i], i, line_link, width);
+                continue;
+            }
         }
 
         p = view_lines[i];
@@ -1567,6 +2066,16 @@ static void render_note_cache(int width)
         }
 
         if (p[n] == '>') {
+            if (p[n + 1] == ' ' && p[n + 2] == '[') {
+                const char *callout = strchr(p + n + 2, ']');
+
+                if (callout && callout[1] == ':') {
+                    format_inline_markdown(callout + 2, text, sizeof(text));
+                    add_wrapped_prefixed_line("! ", text, 2, A_BOLD, i,
+                                              line_link, width);
+                    continue;
+                }
+            }
             prefix[0] = '\0';
             while (level-- > 0)
                 append_string(prefix, sizeof(prefix), "  ");
@@ -1740,7 +2249,7 @@ static void sanitize_rel_title(const char *src, char *dst, size_t dst_size)
     size_t i;
 
     dst[0] = '\0';
-    for (i = 0; src[i] && out_len + 1 < dst_size; i++) {
+    for (i = 0; src[i] && strlen(dst) + 1 < dst_size; i++) {
         if (src[i] == '/') {
             segment[seg_len] = '\0';
             sanitize_title(segment, clean_segment, sizeof(clean_segment));
@@ -1784,7 +2293,7 @@ static void make_template_path(char *out, size_t out_size, const char *name)
 {
     copy_string(out, out_size, note_dir);
     append_string(out, out_size, "/");
-    append_string(out, out_size, TEMPLATE_DIR);
+    append_string(out, out_size, template_dir_name);
     append_string(out, out_size, "/");
     append_string(out, out_size, name);
 }
@@ -1910,7 +2419,7 @@ static int ensure_trash_dir(void)
     char path[PATH_MAX];
     struct stat st;
 
-    make_special_path(path, sizeof(path), TRASH_DIR);
+    make_special_path(path, sizeof(path), trash_dir_name);
     if (stat(path, &st) == 0)
         return S_ISDIR(st.st_mode);
     if (mkdir(path, 0777) == 0)
@@ -1925,7 +2434,7 @@ static void build_trash_path(const char *file, char *out, size_t out_size)
     int attempt = 0;
     FILE *fp;
 
-    make_special_path(dir_path, sizeof(dir_path), TRASH_DIR);
+    make_special_path(dir_path, sizeof(dir_path), trash_dir_name);
     for (;;) {
         if (attempt == 0) {
             copy_string(candidate, sizeof(candidate), dir_path);
@@ -2096,7 +2605,8 @@ static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
         if (stat(child_path, &st) != 0)
             continue;
         if (S_ISDIR(st.st_mode)) {
-            if (strcmp(ent->d_name, TRASH_DIR) != 0 && strcmp(ent->d_name, TEMPLATE_DIR) != 0)
+            if (strcmp(ent->d_name, trash_dir_name) != 0
+                && strcmp(ent->d_name, template_dir_name) != 0)
                 rewrite_links_recursive(child_rel, old_title, new_title);
         } else if (has_md_suffix(ent->d_name)) {
             rewrite_file_links(child_rel, old_title, new_title);
@@ -2234,7 +2744,11 @@ static void draw_header(void)
            current_panel == PANEL_NOTE ? "note" :
            current_panel == PANEL_BACKLINKS ? "backlinks" :
            current_panel == PANEL_SEARCH ? "search" :
-           current_panel == PANEL_OUTLINE ? "outline" : "tags",
+           current_panel == PANEL_OUTLINE ? "outline" :
+           current_panel == PANEL_TAGS ? "tags" :
+           current_panel == PANEL_MENTIONS ? "mentions" :
+           current_panel == PANEL_INFO ? "info" :
+           current_panel == PANEL_SAVED ? "saved" : "palette",
            sort_mode == SORT_ALPHA ? "alpha" :
            sort_mode == SORT_MTIME ? "mtime" : "ctime",
            active_tag[0] ? active_tag : "-",
@@ -2245,7 +2759,7 @@ static void draw_header(void)
 static void draw_status(void)
 {
     const char *msg = status_msg[0] ? status_msg :
-        "m mode  n new  D daily  t template  g tags  S sort  [/] history  Enter open/follow  e edit  q quit";
+        "p palette  f search  b backlinks  u mentions  v saved  i info  Enter open/follow  e edit  q quit";
 
     attron(A_REVERSE);
     move(LINES - 1, 0);
@@ -2368,62 +2882,15 @@ static void draw_note_text(int x, int width)
     }
 }
 
-static int file_contains_link(const char *path, const char *title)
-{
-    FILE *fp;
-    char buf[MAX_LINE + 2];
-    char raw[MAX_TITLE * 2];
-    char target[MAX_TITLE];
-    char heading[MAX_TITLE];
-    char label[MAX_TITLE];
-    const char *p;
-    const char *end;
-    int len;
-
-    fp = fopen(path, "r");
-    if (!fp)
-        return 0;
-    while (fgets(buf, sizeof(buf), fp)) {
-        p = buf;
-        while ((p = strstr(p, "[[")) != NULL) {
-            p += 2;
-            end = strstr(p, "]]");
-            if (!end)
-                break;
-            len = (int)(end - p);
-            if (len >= (int)sizeof(raw))
-                len = (int)sizeof(raw) - 1;
-            memcpy(raw, p, (size_t)len);
-            raw[len] = '\0';
-            parse_wiki_link(raw, target, sizeof(target),
-                            heading, sizeof(heading),
-                            label, sizeof(label));
-            if (strcmp(target, title) == 0) {
-                fclose(fp);
-                return 1;
-            }
-            p = end + 2;
-        }
-    }
-    fclose(fp);
-    return 0;
-}
-
 static void build_backlinks(void)
 {
     int i;
-    char path[PATH_MAX];
 
     backlink_count = 0;
     if (current_note < 0)
         return;
-    for (i = 0; i < note_count && backlink_count < MAX_BACKLINKS; i++) {
-        if (i == current_note)
-            continue;
-        make_path(path, sizeof(path), notes[i].file);
-        if (file_contains_link(path, notes[current_note].title))
-            backlink_indices[backlink_count++] = i;
-    }
+    for (i = 0; i < note_index[current_note].backlink_count && i < MAX_BACKLINKS; i++)
+        backlink_indices[backlink_count++] = note_index[current_note].backlinks[i];
     panel_selected = 0;
     panel_scroll = 0;
     current_panel = PANEL_BACKLINKS;
@@ -2432,16 +2899,19 @@ static void build_backlinks(void)
 static void run_full_text_search(const char *query)
 {
     int i;
-    FILE *fp;
-    char path[PATH_MAX];
-    char buf[MAX_LINE + 2];
-    int line_no;
-    char plain[MAX_LINE + 1];
+    copy_string(current_search_query, sizeof(current_search_query), query);
 
     search_result_count = 0;
-    /* Search remains scan-based for now; v1 indexed search can replace this
-     * without changing the result view or jump behavior. */
     for (i = 0; i < note_count && search_result_count < MAX_RESULTS; i++) {
+        FILE *fp;
+        char path[PATH_MAX];
+        char buf[MAX_LINE + 2];
+        char plain[MAX_LINE + 1];
+        int line_no;
+
+        if (!case_contains(note_index[i].plain_text ? note_index[i].plain_text : "", query)
+            && !case_contains(note_index[i].raw_text ? note_index[i].raw_text : "", query))
+            continue;
         make_path(path, sizeof(path), notes[i].file);
         fp = fopen(path, "r");
         if (!fp)
@@ -2471,6 +2941,22 @@ static void run_full_text_search(const char *query)
         set_status("Content search results");
 }
 
+static void build_mentions(void)
+{
+    int i;
+
+    mention_count = 0;
+    if (current_note < 0)
+        return;
+    for (i = 0; i < note_index[current_note].mention_count && i < MAX_MENTIONS; i++)
+        mention_indices[mention_count++] = note_index[current_note].mentions[i];
+    if (mention_count == 0)
+        set_status("No unlinked mentions");
+    panel_selected = 0;
+    panel_scroll = 0;
+    current_panel = PANEL_MENTIONS;
+}
+
 static void open_outline(void)
 {
     if (current_note < 0 || heading_count == 0) {
@@ -2491,6 +2977,69 @@ static void open_tags(void)
     panel_selected = selected_tag;
     panel_scroll = 0;
     current_panel = PANEL_TAGS;
+}
+
+static void build_note_info(void)
+{
+    char buf[MAX_LINE + 1];
+    int i;
+    int line = 0;
+    struct tm *tm_info;
+    time_t when;
+
+    info_line_count = 0;
+    if (current_note < 0) {
+        current_panel = PANEL_INFO;
+        return;
+    }
+
+    sprintf(info_lines[line++], "Title: %s", notes[current_note].title);
+    sprintf(info_lines[line++], "Display: %s", notes[current_note].display_title);
+    sprintf(info_lines[line++], "Path: %s", notes[current_note].rel_path);
+    if (notes[current_note].tag_count > 0) {
+        buf[0] = '\0';
+        append_string(buf, sizeof(buf), "Tags: ");
+        for (i = 0; i < notes[current_note].tag_count; i++) {
+            if (i > 0)
+                append_string(buf, sizeof(buf), ", ");
+            append_string(buf, sizeof(buf), notes[current_note].tags[i]);
+        }
+        copy_string(info_lines[line++], sizeof(info_lines[0]), buf);
+    }
+    if (notes[current_note].alias_count > 0) {
+        buf[0] = '\0';
+        append_string(buf, sizeof(buf), "Aliases: ");
+        for (i = 0; i < notes[current_note].alias_count; i++) {
+            if (i > 0)
+                append_string(buf, sizeof(buf), ", ");
+            append_string(buf, sizeof(buf), notes[current_note].aliases[i]);
+        }
+        copy_string(info_lines[line++], sizeof(info_lines[0]), buf);
+    }
+    sprintf(info_lines[line++], "Links out: %d", note_index[current_note].outbound_count);
+    sprintf(info_lines[line++], "Backlinks: %d", note_index[current_note].backlink_count);
+    sprintf(info_lines[line++], "Unlinked mentions: %d", note_index[current_note].mention_count);
+    when = (time_t)notes[current_note].mtime;
+    tm_info = localtime(&when);
+    if (tm_info && line < MAX_INFO_LINES) {
+        strftime(buf, sizeof(buf), "Modified: %Y-%m-%d %H:%M", tm_info);
+        copy_string(info_lines[line++], sizeof(info_lines[0]), buf);
+    }
+    info_line_count = line;
+    panel_selected = 0;
+    panel_scroll = 0;
+    current_panel = PANEL_INFO;
+}
+
+static void open_saved_searches(void)
+{
+    if (saved_search_count == 0) {
+        set_status("No saved searches");
+        return;
+    }
+    panel_selected = selected_saved_search;
+    panel_scroll = 0;
+    current_panel = PANEL_SAVED;
 }
 
 static void draw_backlinks(int x, int width)
@@ -2589,6 +3138,99 @@ static void draw_tags(int x, int width)
     }
 }
 
+static void draw_mentions(int x, int width)
+{
+    int i, y, idx;
+
+    mvprintw(1, x, "Unlinked mentions");
+    for (y = 2; y < LINES - 1; y++) {
+        move(y, x);
+        clrtoeol();
+        idx = panel_scroll + y - 2;
+        if (idx >= mention_count)
+            continue;
+        i = mention_indices[idx];
+        if (idx == panel_selected)
+            attron(A_REVERSE);
+        mvprintw(y, x, "%-*.*s", width, width, notes[i].title);
+        if (idx == panel_selected)
+            attroff(A_REVERSE);
+    }
+}
+
+static void draw_note_info(int x, int width)
+{
+    int y, idx;
+
+    mvprintw(1, x, "Note info");
+    for (y = 2; y < LINES - 1; y++) {
+        move(y, x);
+        clrtoeol();
+        idx = panel_scroll + y - 2;
+        if (idx >= info_line_count)
+            continue;
+        mvprintw(y, x, "%-*.*s", width, width, info_lines[idx]);
+    }
+}
+
+static void draw_saved_searches(int x, int width)
+{
+    int y, idx;
+    char line[MAX_LINE + 1];
+
+    mvprintw(1, x, "Saved searches");
+    for (y = 2; y < LINES - 1; y++) {
+        move(y, x);
+        clrtoeol();
+        idx = panel_scroll + y - 2;
+        if (idx >= saved_search_count)
+            continue;
+        sprintf(line, "%s  [%s]", saved_searches[idx].name, saved_searches[idx].query);
+        if (idx == panel_selected)
+            attron(A_REVERSE);
+        mvprintw(y, x, "%-*.*s", width, width, line);
+        if (idx == panel_selected)
+            attroff(A_REVERSE);
+    }
+}
+
+static void draw_commands(int x, int width)
+{
+    int y, idx;
+    static CommandEntry commands[MAX_COMMANDS] = {
+        {"New note", 1},
+        {"New note from template", 2},
+        {"Open daily note", 3},
+        {"Edit current note", 4},
+        {"Find in notes", 5},
+        {"Show backlinks", 6},
+        {"Show unlinked mentions", 7},
+        {"Show outline", 8},
+        {"Show tags", 9},
+        {"Show saved searches", 10},
+        {"Show note info", 11},
+        {"Toggle read/write mode", 12},
+        {"Toggle sidebar", 13},
+        {"Cycle sort mode", 14},
+        {"Rename note", 15},
+        {"Trash note", 16}
+    };
+
+    mvprintw(1, x, "Command palette");
+    for (y = 2; y < LINES - 1; y++) {
+        idx = panel_scroll + y - 2;
+        move(y, x);
+        clrtoeol();
+        if (idx >= 16)
+            continue;
+        if (idx == panel_selected)
+            attron(A_REVERSE);
+        mvprintw(y, x, "%-*.*s", width, width, commands[idx].label);
+        if (idx == panel_selected)
+            attroff(A_REVERSE);
+    }
+}
+
 static void draw_main(void)
 {
     int left_w = COLS / 3;
@@ -2617,6 +3259,14 @@ static void draw_main(void)
         draw_outline(x, COLS - x - 1);
     else if (current_panel == PANEL_TAGS)
         draw_tags(x, COLS - x - 1);
+    else if (current_panel == PANEL_MENTIONS)
+        draw_mentions(x, COLS - x - 1);
+    else if (current_panel == PANEL_INFO)
+        draw_note_info(x, COLS - x - 1);
+    else if (current_panel == PANEL_SAVED)
+        draw_saved_searches(x, COLS - x - 1);
+    else if (current_panel == PANEL_COMMANDS)
+        draw_commands(x, COLS - x - 1);
     else
         draw_note_text(x, COLS - x - 1);
     draw_status();
@@ -2872,6 +3522,76 @@ static void editor_toggle_checkbox(void)
     edit_dirty = 1;
 }
 
+static void editor_autocomplete_link(void)
+{
+    char *line = edit_lines[edit_y];
+    char replacement[MAX_TITLE];
+    char prefix[MAX_TITLE];
+    char *start = NULL;
+    char *p = line;
+    char *end;
+    int prefix_len = 0;
+    int match = -1;
+    int i;
+    int cursor = edit_x;
+
+    while ((p = strstr(p, "[[")) != NULL) {
+        end = strstr(p + 2, "]]");
+        if (p - line <= cursor && (!end || end - line >= cursor))
+            start = p + 2;
+        p += 2;
+    }
+    if (!start) {
+        editor_insert_char('\t');
+        return;
+    }
+    end = line + cursor;
+    while (start + prefix_len < end
+           && start[prefix_len] != '|'
+           && start[prefix_len] != '#'
+           && prefix_len + 1 < (int)sizeof(prefix))
+        prefix[prefix_len++] = start[prefix_len];
+    prefix[prefix_len] = '\0';
+
+    if (prefix[0] == '\0') {
+        set_status("Type part of a note title first");
+        return;
+    }
+
+    if (strcmp(autocomplete_prefix, prefix) != 0)
+        autocomplete_last_match = -1;
+
+    for (i = 0; i < note_count; i++) {
+        int candidate = (autocomplete_last_match + 1 + i) % note_count;
+
+        if (case_starts_with(notes[candidate].title, prefix)
+            || case_starts_with(notes[candidate].display_title, prefix)) {
+            match = candidate;
+            break;
+        }
+    }
+    if (match < 0) {
+        set_status("No note matches link prefix");
+        autocomplete_last_match = -1;
+        autocomplete_prefix[0] = '\0';
+        return;
+    }
+
+    copy_string(autocomplete_prefix, sizeof(autocomplete_prefix), prefix);
+    autocomplete_last_match = match;
+    copy_string(replacement, sizeof(replacement), notes[match].title);
+    if ((int)(strlen(line) - prefix_len + strlen(replacement)) >= MAX_LINE) {
+        set_status("Completed link would exceed line limit");
+        return;
+    }
+    editor_push_undo();
+    memmove(start + strlen(replacement), start + prefix_len,
+            strlen(start + prefix_len) + 1);
+    memcpy(start, replacement, strlen(replacement));
+    edit_x += (int)strlen(replacement) - prefix_len;
+    edit_dirty = 1;
+}
+
 static int editor_find_next(const char *query)
 {
     int start = edit_y + 1;
@@ -2909,6 +3629,8 @@ static void run_editor(void)
     edit_quit_confirm = 0;
     edit_find_line = -1;
     edit_find_query[0] = '\0';
+    autocomplete_prefix[0] = '\0';
+    autocomplete_last_match = -1;
     editor_free_stack(undo_stack, &undo_count);
     editor_free_stack(redo_stack, &redo_count);
     curs_set(1);
@@ -2973,6 +3695,8 @@ static void run_editor(void)
                 edit_x++;
         } else if (ch == KEY_BACKSPACE || ch == 127 || ch == 8) {
             editor_backspace();
+        } else if (ch == '\t') {
+            editor_autocomplete_link();
         } else if (ch == '\n' || ch == '\r') {
             editor_newline();
         } else if (isprint(ch)) {
@@ -3069,6 +3793,91 @@ static void panel_move(int delta, int total)
         panel_scroll = 0;
 }
 
+static void save_current_search(void)
+{
+    char name[MAX_TITLE];
+    int i;
+
+    if (current_search_query[0] == '\0') {
+        set_status("Run a search first");
+        return;
+    }
+    copy_string(name, sizeof(name), current_search_query);
+    if (!prompt_text("Save search as: ", name, sizeof(name)))
+        return;
+    for (i = 0; i < saved_search_count; i++) {
+        if (strcmp(saved_searches[i].name, name) == 0) {
+            copy_string(saved_searches[i].query, sizeof(saved_searches[i].query),
+                        current_search_query);
+            save_saved_searches();
+            set_status("Saved search updated");
+            return;
+        }
+    }
+    if (saved_search_count >= MAX_SAVED_SEARCHES) {
+        set_status("Saved search list full");
+        return;
+    }
+    copy_string(saved_searches[saved_search_count].name,
+                sizeof(saved_searches[saved_search_count].name), name);
+    copy_string(saved_searches[saved_search_count].query,
+                sizeof(saved_searches[saved_search_count].query), current_search_query);
+    saved_search_count++;
+    save_saved_searches();
+    set_status("Saved search added");
+}
+
+static void run_command_palette_action(int action)
+{
+    char input[MAX_TITLE];
+    char template_name[MAX_TITLE];
+
+    input[0] = '\0';
+    template_name[0] = '\0';
+    current_panel = PANEL_NOTE;
+    if (action == 1) {
+        if (prompt_text("New note: ", input, sizeof(input)))
+            create_note(input);
+    } else if (action == 2) {
+        if (prompt_text("Template file: ", template_name, sizeof(template_name))
+            && prompt_text("New note: ", input, sizeof(input)))
+            create_note_with_template(input, template_name);
+    } else if (action == 3) {
+        open_daily_note();
+    } else if (action == 4) {
+        run_editor();
+    } else if (action == 5) {
+        if (prompt_text("Find in notes: ", input, sizeof(input)))
+            run_full_text_search(input);
+    } else if (action == 6) {
+        build_backlinks();
+    } else if (action == 7) {
+        build_mentions();
+    } else if (action == 8) {
+        open_outline();
+    } else if (action == 9) {
+        open_tags();
+    } else if (action == 10) {
+        open_saved_searches();
+    } else if (action == 11) {
+        build_note_info();
+    } else if (action == 12) {
+        read_mode = !read_mode;
+        save_state();
+    } else if (action == 13) {
+        show_sidebar = !show_sidebar;
+        save_state();
+    } else if (action == 14) {
+        sort_mode = (sort_mode + 1) % 3;
+        load_notes();
+        save_state();
+    } else if (action == 15) {
+        rename_current_note();
+    } else if (action == 16) {
+        delete_current_note();
+    }
+}
+
 static void handle_panel_key(int ch)
 {
     int idx;
@@ -3086,6 +3895,14 @@ static void handle_panel_key(int ch)
             panel_move(-1, heading_count);
         else if (current_panel == PANEL_TAGS)
             panel_move(-1, tag_count);
+        else if (current_panel == PANEL_MENTIONS)
+            panel_move(-1, mention_count);
+        else if (current_panel == PANEL_INFO)
+            panel_move(-1, info_line_count);
+        else if (current_panel == PANEL_SAVED)
+            panel_move(-1, saved_search_count);
+        else if (current_panel == PANEL_COMMANDS)
+            panel_move(-1, 16);
         return;
     }
     if (ch == KEY_DOWN || ch == 'j') {
@@ -3097,6 +3914,14 @@ static void handle_panel_key(int ch)
             panel_move(1, heading_count);
         else if (current_panel == PANEL_TAGS)
             panel_move(1, tag_count);
+        else if (current_panel == PANEL_MENTIONS)
+            panel_move(1, mention_count);
+        else if (current_panel == PANEL_INFO)
+            panel_move(1, info_line_count);
+        else if (current_panel == PANEL_SAVED)
+            panel_move(1, saved_search_count);
+        else if (current_panel == PANEL_COMMANDS)
+            panel_move(1, 16);
         return;
     }
     if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
@@ -3121,6 +3946,15 @@ static void handle_panel_key(int ch)
             selected_note = 0;
             top_note = 0;
             save_state();
+        } else if (current_panel == PANEL_MENTIONS && panel_selected < mention_count) {
+            idx = mention_indices[panel_selected];
+            open_note_recording_history(idx, 0);
+        } else if (current_panel == PANEL_SAVED && panel_selected < saved_search_count) {
+            selected_saved_search = panel_selected;
+            run_full_text_search(saved_searches[panel_selected].query);
+        } else if (current_panel == PANEL_COMMANDS) {
+            selected_command = panel_selected;
+            run_command_palette_action(panel_selected + 1);
         }
     }
 }
@@ -3200,11 +4034,11 @@ static void handle_main_key(int ch)
     } else if (ch == KEY_BTAB) {
         if (link_count > 0)
             selected_link = (selected_link + link_count - 1) % link_count;
-    } else if (ch == 'n') {
+    } else if (ch == key_new_note) {
         input[0] = '\0';
         if (prompt_text("New note: ", input, sizeof(input)))
             create_note(input);
-    } else if (ch == 't') {
+    } else if (ch == key_template_note) {
         char template_name[MAX_TITLE];
 
         template_name[0] = '\0';
@@ -3212,48 +4046,60 @@ static void handle_main_key(int ch)
         if (prompt_text("Template file: ", template_name, sizeof(template_name))
             && prompt_text("New note: ", input, sizeof(input)))
             create_note_with_template(input, template_name);
-    } else if (ch == 'D') {
+    } else if (ch == key_daily_note) {
         open_daily_note();
-    } else if (ch == 'e') {
+    } else if (ch == key_edit_note) {
         run_editor();
-    } else if (ch == 'd') {
+    } else if (ch == key_delete_note) {
         delete_current_note();
-    } else if (ch == 'r') {
+    } else if (ch == key_rename_note) {
         rename_current_note();
-    } else if (ch == '/') {
+    } else if (ch == key_filter_titles) {
         if (prompt_text("Filter titles: ", note_filter, sizeof(note_filter))) {
             selected_note = 0;
             top_note = 0;
             build_sidebar();
         }
-    } else if (ch == 'f') {
+    } else if (ch == key_full_text_search) {
         input[0] = '\0';
         if (prompt_text("Find in notes: ", input, sizeof(input)))
             run_full_text_search(input);
     } else if (ch == 27) {
         note_filter[0] = '\0';
-    } else if (ch == 'b') {
+    } else if (ch == key_backlinks) {
         build_backlinks();
-    } else if (ch == 'o') {
+    } else if (ch == key_mentions) {
+        build_mentions();
+    } else if (ch == key_outline) {
         open_outline();
-    } else if (ch == 'g') {
+    } else if (ch == key_tags) {
         open_tags();
-    } else if (ch == 'm') {
+    } else if (ch == key_saved_searches) {
+        open_saved_searches();
+    } else if (ch == key_command_palette) {
+        current_panel = PANEL_COMMANDS;
+        panel_selected = selected_command;
+        panel_scroll = 0;
+    } else if (ch == key_note_info) {
+        build_note_info();
+    } else if (ch == key_toggle_mode) {
         read_mode = !read_mode;
         save_state();
-    } else if (ch == 's') {
+    } else if (ch == key_toggle_sidebar) {
         show_sidebar = !show_sidebar;
         save_state();
-    } else if (ch == 'S') {
+    } else if (ch == key_cycle_sort) {
         sort_mode = (sort_mode + 1) % 3;
         load_notes();
         save_state();
-    } else if (ch == '[') {
+    } else if (ch == key_history_back) {
         navigate_history(history_back, &history_back_count,
                          history_forward, &history_forward_count);
-    } else if (ch == ']') {
+    } else if (ch == key_history_forward) {
         navigate_history(history_forward, &history_forward_count,
                          history_back, &history_back_count);
+    } else if (ch == key_save_search) {
+        save_current_search();
     }
 }
 
@@ -3261,6 +4107,28 @@ static void on_signal(int sig)
 {
     (void)sig;
     running = 0;
+}
+
+static void init_theme(void)
+{
+    short fg = COLOR_WHITE;
+    short bg = COLOR_BLUE;
+
+    if (!has_colors())
+        return;
+    if (case_equals(theme_name, "amber")) {
+        fg = COLOR_YELLOW;
+        bg = COLOR_BLACK;
+    } else if (case_equals(theme_name, "forest")) {
+        fg = COLOR_GREEN;
+        bg = COLOR_BLACK;
+    } else if (case_equals(theme_name, "ocean")) {
+        fg = COLOR_CYAN;
+        bg = COLOR_BLACK;
+    }
+    start_color();
+    init_pair(1, fg, bg);
+    bkgd(COLOR_PAIR(1));
 }
 
 int main(int argc, char **argv)
@@ -3278,14 +4146,21 @@ int main(int argc, char **argv)
     }
 
     signal(SIGINT, on_signal);
+    load_config();
+    load_saved_searches();
     load_notes();
     load_state();
     load_notes();
 
-    if (last_open_title[0]) {
+    if (case_equals(startup_mode, "daily") || case_equals(startup_mode, "none")) {
+        startup_applied = 1;
+    }
+
+    if (!startup_applied && last_open_title[0]) {
         for (i = 0; i < note_count; i++) {
             if (strcmp(notes[i].title, last_open_title) == 0) {
                 load_note_view(i);
+                startup_applied = 1;
                 break;
             }
         }
@@ -3295,9 +4170,13 @@ int main(int argc, char **argv)
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
+    init_theme();
     curs_set(0);
 
-    set_status("m mode  n new  D daily  t template  g tags  S sort  [/] history  Enter open/follow  e edit  q quit");
+    if (case_equals(startup_mode, "daily"))
+        open_daily_note();
+
+    set_status("p palette  f search  b backlinks  u mentions  v saved  i info  Enter open/follow  e edit  q quit");
     while (running) {
         draw_main();
         ch = getch();
@@ -3307,5 +4186,6 @@ int main(int argc, char **argv)
     save_state();
     endwin();
     free_view();
+    free_note_indices();
     return 0;
 }
