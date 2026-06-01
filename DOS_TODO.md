@@ -17,16 +17,16 @@ machine.
 
 - [ ] Install or identify a DJGPP build environment.
 - [ ] Install or build PDCurses for the same DJGPP environment.
-- [ ] Confirm the expected DOS runtime target:
-  - [ ] FreeDOS, MS-DOS, or emulator.
-  - [ ] DPMI provider available.
-  - [ ] Long filename support available.
-  - [ ] Mouse driver expectations, if mouse support matters.
+- [x] Confirm the expected DOS runtime target:
+  - [x] FreeDOS, MS-DOS, or emulator.
+  - [x] DPMI provider available.
+  - [x] Long filename support available.
+  - [x] Mouse driver expectations, if mouse support matters.
 - [ ] Document exact compiler, curses, and DOS runtime versions.
-- [ ] Add a small `build-dos.bat` or `Makefile.dj` for the DOS build.
-- [ ] Add `-DMEMEX_DOS_PROFILE` to the DOS build flags.
-- [ ] Link the DOS build against PDCurses.
-- [ ] Keep the existing Linux `Makefile` path intact.
+- [x] Add a small `build-dos.bat` or `Makefile.dj` for the DOS build.
+- [x] Add `-DMEMEX_DOS_PROFILE` to the DOS build flags.
+- [x] Link the DOS build against PDCurses.
+- [x] Keep the existing Linux `Makefile` path intact.
 
 ## Phase 2: Split Configuration Limits
 

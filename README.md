@@ -41,6 +41,12 @@ If your system has old curses but not ncurses, try:
 make LIBS=-lcurses
 ```
 
+## DOS Build Status
+
+The `dos-port` branch has an initial DJGPP/PDCurses build entry point, but the
+port is not complete yet. See [DOS_BUILD.md](./DOS_BUILD.md) and
+[DOS_TODO.md](./DOS_TODO.md).
+
 ## Run
 
 ```sh

@@ -1,0 +1,22 @@
+# DJGPP/PDCurses build for DOS.
+#
+# Run from a DJGPP shell with PDCurses installed in the compiler's include
+# and library search paths:
+#
+#   make -f Makefile.dj
+
+CC = gcc
+CFLAGS = -O2 -Wall -DMEMEX_DOS_PROFILE
+LDFLAGS =
+LIBS = -lpdcurses
+EXE = memex.exe
+
+all: $(EXE)
+
+$(EXE): memex.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $(EXE) memex.c $(LIBS)
+
+clean:
+	if exist $(EXE) del $(EXE)
+
+.PHONY: all clean
