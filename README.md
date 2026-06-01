@@ -72,6 +72,7 @@ directories are created.
 - `A`: save the current full-text search
 - `s`: show/hide the notes sidebar
 - `S`: cycle sort mode (alphabetical, modified time, created time)
+- `T`: cycle color scheme
 - `[` / `]`: back/forward note history
 - `Tab` / `Shift-Tab`: move link selection inside the open note
 - `Esc`: leave editor/filter/backlinks
@@ -113,3 +114,4 @@ Supported options:
 - `key_new`, `key_template`, `key_daily`, `key_edit`, `key_delete`, `key_rename`
 - `key_filter`, `key_search`, `key_backlinks`, `key_mentions`, `key_outline`
 - `key_tags`, `key_saved`, `key_palette`, `key_info`
+- `key_theme`

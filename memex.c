@@ -258,6 +258,7 @@ static int key_note_info = 'i';
 static int key_toggle_mode = 'm';
 static int key_toggle_sidebar = 's';
 static int key_cycle_sort = 'S';
+static int key_cycle_theme = 'T';
 static int key_history_back = '[';
 static int key_history_forward = ']';
 static int key_save_search = 'A';
@@ -281,6 +282,17 @@ static int autocomplete_last_match = -1;
 static void trim_copy(const char *src, char *dst, size_t dst_size);
 static int find_note_by_target(const char *target);
 static void build_note_indices(void);
+static void init_theme(void);
+static int case_equals(const char *a, const char *b);
+
+static const char *theme_names[] = {
+    "plain",
+    "amber",
+    "forest",
+    "ocean"
+};
+
+#define THEME_COUNT ((int)(sizeof(theme_names) / sizeof(theme_names[0])))
 
 static void copy_string(char *dst, size_t dst_size, const char *src)
 {
@@ -320,6 +332,17 @@ static void append_nstring(char *dst, size_t dst_size, const char *src, size_t n
 static void set_status(const char *msg)
 {
     copy_string(status_msg, sizeof(status_msg), msg);
+}
+
+static int theme_index_from_name(const char *name)
+{
+    int i;
+
+    for (i = 0; i < THEME_COUNT; i++) {
+        if (case_equals(name, theme_names[i]))
+            return i;
+    }
+    return 0;
 }
 
 static int is_word_boundary_char(int ch)
@@ -1508,6 +1531,8 @@ static void set_keybinding(const char *name, const char *value)
         key_command_palette = key;
     else if (strcmp(name, "key_info") == 0)
         key_note_info = key;
+    else if (strcmp(name, "key_theme") == 0)
+        key_cycle_theme = key;
 }
 
 static void load_config(void)
@@ -1712,6 +1737,7 @@ static void save_state(void)
     fprintf(fp, "sidebar=%d\n", show_sidebar ? 1 : 0);
     fprintf(fp, "read_mode=%d\n", read_mode ? 1 : 0);
     fprintf(fp, "sort_mode=%d\n", sort_mode);
+    fprintf(fp, "theme=%s\n", theme_name);
     fprintf(fp, "active_tag=%s\n", active_tag);
     fprintf(fp, "last_note=%s\n",
             current_note >= 0 ? notes[current_note].title : last_open_title);
@@ -1736,6 +1762,8 @@ static void load_state(void)
             read_mode = atoi(buf + 10) ? 1 : 0;
         } else if (strncmp(buf, "sort_mode=", 10) == 0) {
             sort_mode = atoi(buf + 10);
+        } else if (strncmp(buf, "theme=", 6) == 0) {
+            copy_string(theme_name, sizeof(theme_name), buf + 6);
         } else if (strncmp(buf, "active_tag=", 11) == 0) {
             copy_string(active_tag, sizeof(active_tag), buf + 11);
         } else if (strncmp(buf, "last_note=", 10) == 0) {
@@ -2739,7 +2767,7 @@ static void draw_header(void)
     attron(A_REVERSE);
     move(0, 0);
     clrtoeol();
-    printw(" memex  mode:%s  view:%s  sort:%s  tag:%s  /:%s",
+    printw(" memex  mode:%s  view:%s  sort:%s  theme:%s  tag:%s  /:%s",
            read_mode ? "read" : "write",
            current_panel == PANEL_NOTE ? "note" :
            current_panel == PANEL_BACKLINKS ? "backlinks" :
@@ -2751,6 +2779,7 @@ static void draw_header(void)
            current_panel == PANEL_SAVED ? "saved" : "palette",
            sort_mode == SORT_ALPHA ? "alpha" :
            sort_mode == SORT_MTIME ? "mtime" : "ctime",
+           theme_name,
            active_tag[0] ? active_tag : "-",
            note_filter[0] ? note_filter : "-");
     attroff(A_REVERSE);
@@ -3212,8 +3241,9 @@ static void draw_commands(int x, int width)
         {"Toggle read/write mode", 12},
         {"Toggle sidebar", 13},
         {"Cycle sort mode", 14},
-        {"Rename note", 15},
-        {"Trash note", 16}
+        {"Cycle color scheme", 15},
+        {"Rename note", 16},
+        {"Trash note", 17}
     };
 
     mvprintw(1, x, "Command palette");
@@ -3221,7 +3251,7 @@ static void draw_commands(int x, int width)
         idx = panel_scroll + y - 2;
         move(y, x);
         clrtoeol();
-        if (idx >= 16)
+        if (idx >= 17)
             continue;
         if (idx == panel_selected)
             attron(A_REVERSE);
@@ -3793,6 +3823,19 @@ static void panel_move(int delta, int total)
         panel_scroll = 0;
 }
 
+static void cycle_theme(void)
+{
+    int idx = theme_index_from_name(theme_name);
+    char msg[MAX_STATUS];
+
+    idx = (idx + 1) % THEME_COUNT;
+    copy_string(theme_name, sizeof(theme_name), theme_names[idx]);
+    init_theme();
+    sprintf(msg, "Theme: %s", theme_name);
+    set_status(msg);
+    save_state();
+}
+
 static void save_current_search(void)
 {
     char name[MAX_TITLE];
@@ -3872,8 +3915,10 @@ static void run_command_palette_action(int action)
         load_notes();
         save_state();
     } else if (action == 15) {
-        rename_current_note();
+        cycle_theme();
     } else if (action == 16) {
+        rename_current_note();
+    } else if (action == 17) {
         delete_current_note();
     }
 }
@@ -3902,7 +3947,7 @@ static void handle_panel_key(int ch)
         else if (current_panel == PANEL_SAVED)
             panel_move(-1, saved_search_count);
         else if (current_panel == PANEL_COMMANDS)
-            panel_move(-1, 16);
+            panel_move(-1, 17);
         return;
     }
     if (ch == KEY_DOWN || ch == 'j') {
@@ -3921,7 +3966,7 @@ static void handle_panel_key(int ch)
         else if (current_panel == PANEL_SAVED)
             panel_move(1, saved_search_count);
         else if (current_panel == PANEL_COMMANDS)
-            panel_move(1, 16);
+            panel_move(1, 17);
         return;
     }
     if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
@@ -4092,6 +4137,8 @@ static void handle_main_key(int ch)
         sort_mode = (sort_mode + 1) % 3;
         load_notes();
         save_state();
+    } else if (ch == key_cycle_theme) {
+        cycle_theme();
     } else if (ch == key_history_back) {
         navigate_history(history_back, &history_back_count,
                          history_forward, &history_forward_count);
@@ -4113,16 +4160,19 @@ static void init_theme(void)
 {
     short fg = COLOR_WHITE;
     short bg = COLOR_BLUE;
+    int idx;
 
     if (!has_colors())
         return;
-    if (case_equals(theme_name, "amber")) {
+    idx = theme_index_from_name(theme_name);
+    copy_string(theme_name, sizeof(theme_name), theme_names[idx]);
+    if (idx == 1) {
         fg = COLOR_YELLOW;
         bg = COLOR_BLACK;
-    } else if (case_equals(theme_name, "forest")) {
+    } else if (idx == 2) {
         fg = COLOR_GREEN;
         bg = COLOR_BLACK;
-    } else if (case_equals(theme_name, "ocean")) {
+    } else if (idx == 3) {
         fg = COLOR_CYAN;
         bg = COLOR_BLACK;
     }
