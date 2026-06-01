@@ -36,34 +36,34 @@ Focus: complete the core note-reading and note-finding workflow.
 
 Focus: improve organization and editing ergonomics.
 
-- [ ] Add tag support.
-  - Parse inline tags like `#tag`.
-  - Add a tag browser or tag filter view.
-- [ ] Add YAML frontmatter support.
-  - Parse frontmatter without requiring a full markdown parser.
-  - Expose common fields such as title, tags, and aliases.
-- [ ] Add note sorting modes.
-  - Alphabetical.
-  - Modified time.
-  - Created time if available.
-- [ ] Replace the flat note list with a folder tree sidebar.
-  - Support nested directories.
-  - Support expand/collapse in the tree.
-- [ ] Add templates for new notes.
-  - Allow a default note template.
-  - Add optional specialized templates, such as daily note templates.
-- [ ] Add daily notes.
-  - Open or create today’s note.
-  - Support configurable date-based filenames.
-- [ ] Improve the editor workflow.
-  - Continue lists and checklists on newline.
-  - Toggle checkbox state on the current line.
-  - Add find within the current note.
-  - Add undo/redo.
-  - Warn before quitting with unsaved changes.
-- [ ] Add note navigation history.
-  - Back/forward through recently opened notes.
-- [ ] Add recent notes and pinned notes.
+- [x] Add tag support.
+  - [x] Parse inline tags like `#tag`.
+  - [x] Add a tag browser or tag filter view.
+- [x] Add YAML frontmatter support.
+  - [x] Parse frontmatter without requiring a full markdown parser.
+  - [x] Expose common fields such as title, tags, and aliases.
+- [x] Add note sorting modes.
+  - [x] Alphabetical.
+  - [x] Modified time.
+  - [x] Created time if available.
+- [x] Replace the flat note list with a folder tree sidebar.
+  - [x] Support nested directories.
+  - [x] Support expand/collapse in the tree.
+- [x] Add templates for new notes.
+  - [x] Allow a default note template.
+  - [x] Add optional specialized templates, such as daily note templates.
+- [x] Add daily notes.
+  - [x] Open or create today’s note.
+  - [x] Support configurable date-based filenames.
+- [x] Improve the editor workflow.
+  - [x] Continue lists and checklists on newline.
+  - [x] Toggle checkbox state on the current line.
+  - [x] Add find within the current note.
+  - [x] Add undo/redo.
+  - [x] Warn before quitting with unsaved changes.
+- [x] Add note navigation history.
+  - [x] Back/forward through recently opened notes.
+- [x] Add recent notes and pinned notes.
 
 ## v0.4
 
@@ -101,9 +101,9 @@ Focus: turn `memex` into a more complete knowledge-base tool.
 2. [x] Better read mode rendering with wrapping
 3. [x] Heading outline and section jump
 4. [x] Rename with wiki-link rewrite
-5. [ ] Tag support
+5. [x] Tag support
 6. [x] UI state persistence
-7. [ ] Folder tree sidebar
+7. [x] Folder tree sidebar
 8. [ ] Link autocomplete
 9. [ ] Indexed search and backlinks
 
@@ -116,5 +116,5 @@ finish first:
 - [x] Better read mode rendering
 - [x] Outline view
 - [x] Rename with link updates
-- [ ] Tags
+- [x] Tags
 - [x] UI state persistence
