@@ -30,22 +30,22 @@ machine.
 
 ## Phase 2: Split Configuration Limits
 
-- [ ] Move compile-time limits out of `memex.c` into a config header.
-- [ ] Add a normal profile matching the current Linux limits.
-- [ ] Add a DOS profile with smaller limits:
-  - [ ] `PATH_MAX`: `1024 -> 260`
-  - [ ] `MAX_NOTES`: `512 -> 128`
-  - [ ] `MAX_LINES`: `2048 -> 1024`
-  - [ ] `MAX_RENDERED`: `8192 -> 2048`
-  - [ ] `MAX_RESULTS`: `256 -> 96`
-  - [ ] `MAX_BACKLINKS`: `256 -> 96`
-  - [ ] `MAX_MENTIONS`: `256 -> 96`
-  - [ ] `MAX_DIRS`: `256 -> 96`
-  - [ ] `MAX_SIDEBAR_ITEMS`: `1024 -> 256`
-  - [ ] `MAX_HISTORY`: `128 -> 32`
-  - [ ] `MAX_SAVED_SEARCHES`: `32 -> 16`
-- [ ] Build and run the Linux build after moving the constants.
-- [ ] Measure static/global memory usage for both profiles.
+- [x] Move compile-time limits out of `memex.c` into a config header.
+- [x] Add a normal profile matching the current Linux limits.
+- [x] Add a DOS profile with smaller limits:
+  - [x] `PATH_MAX`: `1024 -> 260`
+  - [x] `MAX_NOTES`: `512 -> 128`
+  - [x] `MAX_LINES`: `2048 -> 1024`
+  - [x] `MAX_RENDERED`: `8192 -> 2048`
+  - [x] `MAX_RESULTS`: `256 -> 96`
+  - [x] `MAX_BACKLINKS`: `256 -> 96`
+  - [x] `MAX_MENTIONS`: `256 -> 96`
+  - [x] `MAX_DIRS`: `256 -> 96`
+  - [x] `MAX_SIDEBAR_ITEMS`: `1024 -> 256`
+  - [x] `MAX_HISTORY`: `128 -> 32`
+  - [x] `MAX_SAVED_SEARCHES`: `32 -> 16`
+- [x] Build and run the Linux build after moving the constants.
+- [x] Measure static/global memory usage for both profiles.
 
 ## Phase 3: Add A Platform Layer
 

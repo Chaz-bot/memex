@@ -8,7 +8,7 @@ BINDIR = $(PREFIX)/bin
 
 all: memex
 
-memex: memex.c
+memex: memex.c memex_config.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o memex memex.c $(LIBS)
 
 install: memex

@@ -21,44 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifndef PATH_MAX
-#define PATH_MAX 1024
-#endif
-
-#define MAX_NOTES 512
-#define MAX_NAME 80
-#define MAX_TITLE 96
-#define MAX_FILTER 80
-#define MAX_LINE 240
-#define MAX_LINES 2048
-#define MAX_NOTE_BYTES (48 * 1024)
-#define MAX_LINKS 96
-#define MAX_STATUS 160
-#define MAX_HEADINGS 128
-#define MAX_RESULTS 256
-#define MAX_BACKLINKS 256
-#define MAX_RENDERED 8192
-#define MAX_TAGS_PER_NOTE 16
-#define MAX_TAGS 256
-#define MAX_ALIASES 16
-#define MAX_DIRS 256
-#define MAX_SIDEBAR_ITEMS 1024
-#define MAX_PATH_PART 96
-#define MAX_HISTORY 128
-#define MAX_RECENT 12
-#define MAX_UNDO 32
-#define MAX_SAVED_SEARCHES 32
-#define MAX_MENTIONS 256
-#define MAX_INFO_LINES 32
-#define MAX_COMMANDS 20
-#define STATE_FILE ".memex-state"
-#define CONFIG_FILE ".memexrc"
-#define SAVED_SEARCH_FILE ".memex-searches"
-#define TRASH_DIR ".trash"
-#define TEMPLATE_DIR ".templates"
-#define DEFAULT_TEMPLATE "default.md"
-#define DAILY_TEMPLATE "daily.md"
-#define DAILY_FORMAT_FILE ".memex-daily-format"
+#include "memex_config.h"
 
 #define CTRL_KEY(x) ((x) & 037)
 
@@ -68,9 +31,9 @@
 
 typedef struct {
     char title[MAX_TITLE];
-    char file[PATH_MAX];
-    char rel_path[PATH_MAX];
-    char dir_path[PATH_MAX];
+    char file[MEMEX_PATH_MAX];
+    char rel_path[MEMEX_PATH_MAX];
+    char dir_path[MEMEX_PATH_MAX];
     char display_title[MAX_TITLE];
     char tags[MAX_TAGS_PER_NOTE][MAX_TITLE];
     int tag_count;
@@ -125,7 +88,7 @@ typedef struct {
 } TagInfo;
 
 typedef struct {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     char name[MAX_PATH_PART];
     int depth;
     int expanded;
@@ -178,7 +141,7 @@ enum {
     SIDEBAR_KIND_NOTE = 2
 };
 
-static char note_dir[PATH_MAX];
+static char note_dir[MEMEX_PATH_MAX];
 static Note notes[MAX_NOTES];
 static int note_count = 0;
 static int selected_note = 0;
@@ -508,7 +471,7 @@ static int ensure_dir_entry(const char *path)
 
 static int parent_dir_visible(const char *path)
 {
-    char parent[PATH_MAX];
+    char parent[MEMEX_PATH_MAX];
     char *slash;
     int idx;
 
@@ -1262,7 +1225,7 @@ static void clear_forward_history(void)
 
 static void note_collect_metadata(Note *note)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     char buf[MAX_LINE + 2];
     struct stat st;
@@ -1291,7 +1254,7 @@ static void note_collect_metadata(Note *note)
 static void load_note_entry(const char *rel_path)
 {
     char file_name[MAX_NAME + 4];
-    char dir_path[PATH_MAX];
+    char dir_path[MEMEX_PATH_MAX];
     Note *note;
 
     if (note_count >= MAX_NOTES)
@@ -1312,7 +1275,7 @@ static void load_note_entry(const char *rel_path)
 
 static void scan_notes_recursive(const char *rel_dir)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     DIR *dir;
     struct dirent *ent;
 
@@ -1325,8 +1288,8 @@ static void scan_notes_recursive(const char *rel_dir)
     if (!dir)
         return;
     while ((ent = readdir(dir)) != NULL && note_count < MAX_NOTES) {
-        char child_rel[PATH_MAX];
-        char child_path[PATH_MAX];
+        char child_rel[MEMEX_PATH_MAX];
+        char child_path[MEMEX_PATH_MAX];
         struct stat st;
 
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
@@ -1559,7 +1522,7 @@ static void set_keybinding(const char *name, const char *value)
 
 static void load_config(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     char buf[MAX_LINE + 2];
 
@@ -1599,7 +1562,7 @@ static void load_config(void)
 
 static void load_saved_searches(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     char buf[MAX_LINE + 2];
 
@@ -1631,7 +1594,7 @@ static void load_saved_searches(void)
 
 static void save_saved_searches(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     int i;
 
@@ -1664,7 +1627,7 @@ static void build_note_indices(void)
     free_note_indices();
     for (i = 0; i < note_count; i++) {
         FILE *fp;
-        char path[PATH_MAX];
+        char path[MEMEX_PATH_MAX];
         char buf[MAX_LINE + 2];
 
         make_path(path, sizeof(path), notes[i].file);
@@ -1749,7 +1712,7 @@ static void build_note_indices(void)
 
 static void save_state(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
 
     make_special_path(path, sizeof(path), STATE_FILE);
@@ -1768,7 +1731,7 @@ static void save_state(void)
 
 static void load_state(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     char buf[MAX_LINE + 2];
 
@@ -1963,7 +1926,7 @@ static void render_table_line(const char *line, int source_line, int link_index,
 static void render_embed_note(const char *target, int source_line, int link_index, int width)
 {
     int idx = find_note_by_target(target);
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     char buf[MAX_LINE + 2];
     char plain[MAX_LINE + 1];
@@ -2179,7 +2142,7 @@ static void jump_to_source_line(int source_line)
 
 static void load_note_view(int idx)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     char buf[MAX_LINE + 2];
     FILE *fp;
     long bytes = 0;
@@ -2324,7 +2287,7 @@ static void sanitize_rel_title(const char *src, char *dst, size_t dst_size)
 
 static int ensure_parent_dirs(const char *rel_path)
 {
-    char full[PATH_MAX];
+    char full[MEMEX_PATH_MAX];
     char *p;
 
     make_path(full, sizeof(full), rel_path);
@@ -2374,10 +2337,10 @@ static void write_note_template(FILE *out, const char *title, const char *templa
 
 static int create_note_with_template(const char *title, const char *template_name)
 {
-    char clean[PATH_MAX];
-    char rel_path[PATH_MAX];
-    char path[PATH_MAX];
-    char template_path[PATH_MAX];
+    char clean[MEMEX_PATH_MAX];
+    char rel_path[MEMEX_PATH_MAX];
+    char path[MEMEX_PATH_MAX];
+    char template_path[MEMEX_PATH_MAX];
     char leaf[MAX_TITLE];
     FILE *fp;
 
@@ -2421,7 +2384,7 @@ static int create_note(const char *title)
 
 static void load_daily_format(char *out, size_t out_size)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
 
     copy_string(out, out_size, "Daily/%Y-%m-%d");
@@ -2437,7 +2400,7 @@ static void load_daily_format(char *out, size_t out_size)
 static void open_daily_note(void)
 {
     char format[MAX_TITLE];
-    char rel_title[PATH_MAX];
+    char rel_title[MEMEX_PATH_MAX];
     char leaf[MAX_TITLE];
     time_t now;
     struct tm *tm_now;
@@ -2466,7 +2429,7 @@ static void open_daily_note(void)
 
 static int ensure_trash_dir(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     struct stat st;
 
     make_special_path(path, sizeof(path), trash_dir_name);
@@ -2479,8 +2442,8 @@ static int ensure_trash_dir(void)
 
 static void build_trash_path(const char *file, char *out, size_t out_size)
 {
-    char dir_path[PATH_MAX];
-    char candidate[PATH_MAX];
+    char dir_path[MEMEX_PATH_MAX];
+    char candidate[MEMEX_PATH_MAX];
     int attempt = 0;
     FILE *fp;
 
@@ -2504,8 +2467,8 @@ static void build_trash_path(const char *file, char *out, size_t out_size)
 
 static void delete_current_note(void)
 {
-    char path[PATH_MAX];
-    char trash_path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
+    char trash_path[MEMEX_PATH_MAX];
 
     if (current_note < 0)
         return;
@@ -2529,8 +2492,8 @@ static void delete_current_note(void)
 static int rewrite_file_links(const char *file_name, const char *old_title,
                               const char *new_title)
 {
-    char path[PATH_MAX];
-    char temp_path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
+    char temp_path[MEMEX_PATH_MAX];
     FILE *in;
     FILE *out;
     char buf[MAX_LINE + 2];
@@ -2627,7 +2590,7 @@ static int rewrite_file_links(const char *file_name, const char *old_title,
 static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
                                     const char *new_title)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     DIR *dir;
     struct dirent *ent;
 
@@ -2639,8 +2602,8 @@ static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
     if (!dir)
         return;
     while ((ent = readdir(dir)) != NULL) {
-        char child_rel[PATH_MAX];
-        char child_path[PATH_MAX];
+        char child_rel[MEMEX_PATH_MAX];
+        char child_path[MEMEX_PATH_MAX];
         struct stat st;
 
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
@@ -2672,10 +2635,10 @@ static void rewrite_links_for_rename(const char *old_title, const char *new_titl
 
 static void rename_current_note(void)
 {
-    char title[PATH_MAX];
-    char clean[PATH_MAX];
-    char file[PATH_MAX];
-    char old_path[PATH_MAX], new_path[PATH_MAX];
+    char title[MEMEX_PATH_MAX];
+    char clean[MEMEX_PATH_MAX];
+    char file[MEMEX_PATH_MAX];
+    char old_path[MEMEX_PATH_MAX], new_path[MEMEX_PATH_MAX];
     char old_title[MAX_TITLE];
     FILE *fp;
 
@@ -2725,7 +2688,7 @@ static void rename_current_note(void)
 
 static void load_editor(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     char buf[MAX_LINE + 2];
     FILE *fp;
     long bytes = 0;
@@ -2758,7 +2721,7 @@ static void load_editor(void)
 
 static int save_editor(void)
 {
-    char path[PATH_MAX];
+    char path[MEMEX_PATH_MAX];
     FILE *fp;
     int i;
     char title[MAX_TITLE];
@@ -2955,7 +2918,7 @@ static void run_full_text_search(const char *query)
     search_result_count = 0;
     for (i = 0; i < note_count && search_result_count < MAX_RESULTS; i++) {
         FILE *fp;
-        char path[PATH_MAX];
+        char path[MEMEX_PATH_MAX];
         char buf[MAX_LINE + 2];
         char plain[MAX_LINE + 1];
         int line_no;
