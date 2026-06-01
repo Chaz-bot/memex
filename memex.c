@@ -284,6 +284,14 @@ static int find_note_by_target(const char *target);
 static void build_note_indices(void);
 static void init_theme(void);
 static int case_equals(const char *a, const char *b);
+static void handle_main_key(int ch);
+#ifdef KEY_MOUSE
+static int mouse_wheel_up(mmask_t state);
+static int mouse_wheel_down(mmask_t state);
+static int mouse_left_click(mmask_t state);
+static int mouse_left_double_click(mmask_t state);
+static void handle_editor_mouse(void);
+#endif
 
 static const char *theme_names[] = {
     "plain",
@@ -616,6 +624,20 @@ static int content_width(void)
         left_w = COLS / 2;
     x = left_w + 2;
     return COLS - x - 1;
+}
+
+static int sidebar_width(void)
+{
+    int left_w;
+
+    if (!show_sidebar)
+        return 0;
+    left_w = COLS / 3;
+    if (left_w < 20)
+        left_w = 20;
+    if (left_w > COLS - 20)
+        left_w = COLS / 2;
+    return left_w;
 }
 
 static void make_path(char *out, size_t out_size, const char *file)
@@ -3648,6 +3670,51 @@ static int editor_find_next(const char *query)
     return 0;
 }
 
+#ifdef KEY_MOUSE
+static void handle_editor_mouse(void)
+{
+    MEVENT ev;
+    int line;
+    int col;
+
+    if (getmouse(&ev) != OK)
+        return;
+    if (ev.y <= 0 || ev.y >= LINES - 1)
+        return;
+    if (mouse_wheel_up(ev.bstate)) {
+        if (edit_y > 0)
+            edit_y--;
+        if (edit_scroll > 0)
+            edit_scroll--;
+        if (edit_x > (int)strlen(edit_lines[edit_y]))
+            edit_x = (int)strlen(edit_lines[edit_y]);
+        return;
+    }
+    if (mouse_wheel_down(ev.bstate)) {
+        if (edit_y + 1 < edit_line_count)
+            edit_y++;
+        if (edit_y >= edit_scroll + LINES - 2)
+            edit_scroll++;
+        if (edit_x > (int)strlen(edit_lines[edit_y]))
+            edit_x = (int)strlen(edit_lines[edit_y]);
+        return;
+    }
+    if (!mouse_left_click(ev.bstate) && !mouse_left_double_click(ev.bstate))
+        return;
+
+    line = edit_scroll + ev.y - 1;
+    if (line < 0 || line >= edit_line_count)
+        return;
+    col = ev.x - 5;
+    if (col < 0)
+        col = 0;
+    if (col > (int)strlen(edit_lines[line]))
+        col = (int)strlen(edit_lines[line]);
+    edit_y = line;
+    edit_x = col;
+}
+#endif
+
 static void run_editor(void)
 {
     int ch, len;
@@ -3668,6 +3735,12 @@ static void run_editor(void)
         draw_editor();
         ch = getch();
         len = (int)strlen(edit_lines[edit_y]);
+#ifdef KEY_MOUSE
+        if (ch == KEY_MOUSE) {
+            handle_editor_mouse();
+            continue;
+        }
+#endif
         if (ch == 27) {
             if (edit_dirty && !edit_quit_confirm) {
                 set_status("Unsaved changes: Esc again to discard");
@@ -4004,12 +4077,200 @@ static void handle_panel_key(int ch)
     }
 }
 
+#ifdef KEY_MOUSE
+static int panel_item_count(void)
+{
+    if (current_panel == PANEL_BACKLINKS)
+        return backlink_count;
+    if (current_panel == PANEL_SEARCH)
+        return search_result_count;
+    if (current_panel == PANEL_OUTLINE)
+        return heading_count;
+    if (current_panel == PANEL_TAGS)
+        return tag_count;
+    if (current_panel == PANEL_MENTIONS)
+        return mention_count;
+    if (current_panel == PANEL_INFO)
+        return info_line_count;
+    if (current_panel == PANEL_SAVED)
+        return saved_search_count;
+    if (current_panel == PANEL_COMMANDS)
+        return 17;
+    return 0;
+}
+
+static int mouse_has_button(mmask_t state, mmask_t mask)
+{
+    return (state & mask) != 0;
+}
+
+static int mouse_wheel_up(mmask_t state)
+{
+#ifdef BUTTON4_PRESSED
+    if (mouse_has_button(state, BUTTON4_PRESSED))
+        return 1;
+#endif
+#ifdef BUTTON4_CLICKED
+    if (mouse_has_button(state, BUTTON4_CLICKED))
+        return 1;
+#endif
+    return 0;
+}
+
+static int mouse_wheel_down(mmask_t state)
+{
+#ifdef BUTTON5_PRESSED
+    if (mouse_has_button(state, BUTTON5_PRESSED))
+        return 1;
+#endif
+#ifdef BUTTON5_CLICKED
+    if (mouse_has_button(state, BUTTON5_CLICKED))
+        return 1;
+#endif
+    return 0;
+}
+
+static int mouse_left_click(mmask_t state)
+{
+#ifdef BUTTON1_CLICKED
+    if (mouse_has_button(state, BUTTON1_CLICKED))
+        return 1;
+#endif
+#ifdef BUTTON1_PRESSED
+    if (mouse_has_button(state, BUTTON1_PRESSED))
+        return 1;
+#endif
+    return 0;
+}
+
+static int mouse_left_double_click(mmask_t state)
+{
+#ifdef BUTTON1_DOUBLE_CLICKED
+    if (mouse_has_button(state, BUTTON1_DOUBLE_CLICKED))
+        return 1;
+#endif
+    return 0;
+}
+
+static void activate_sidebar_selection(void)
+{
+    SidebarItem *item;
+    int idx;
+
+    if (selected_note < 0 || selected_note >= sidebar_item_count)
+        return;
+    item = &sidebar_items[selected_note];
+    if (item->kind == SIDEBAR_KIND_DIR) {
+        dirs[item->dir_index].expanded = !dirs[item->dir_index].expanded;
+        build_sidebar();
+    } else if (item->kind == SIDEBAR_KIND_NOTE) {
+        idx = item->note_index;
+        if (idx >= 0)
+            open_note_recording_history(idx, 0);
+    }
+}
+
+static void handle_main_mouse(void)
+{
+    MEVENT ev;
+    int left_w;
+    int main_x;
+    int idx;
+    int total;
+    int line;
+
+    if (getmouse(&ev) != OK)
+        return;
+    if (ev.y <= 0 || ev.y >= LINES - 1)
+        return;
+
+    left_w = sidebar_width();
+    main_x = show_sidebar ? left_w + 2 : 0;
+
+    if (mouse_wheel_up(ev.bstate)) {
+        if (current_panel != PANEL_NOTE)
+            panel_move(-3, panel_item_count());
+        else if (show_sidebar && ev.x < left_w && selected_note > 0)
+            selected_note--;
+        else if (note_scroll > 0)
+            note_scroll--;
+        return;
+    }
+    if (mouse_wheel_down(ev.bstate)) {
+        if (current_panel != PANEL_NOTE)
+            panel_move(3, panel_item_count());
+        else if (show_sidebar && ev.x < left_w && selected_note + 1 < sidebar_item_count)
+            selected_note++;
+        else
+            note_scroll++;
+        return;
+    }
+
+    if (!mouse_left_click(ev.bstate) && !mouse_left_double_click(ev.bstate))
+        return;
+
+    if (show_sidebar && ev.x < left_w && ev.y >= 2) {
+        build_sidebar();
+        idx = top_note + ev.y - 2;
+        if (idx >= 0 && idx < sidebar_item_count) {
+            selected_note = idx;
+            if (mouse_left_double_click(ev.bstate))
+                activate_sidebar_selection();
+        }
+        return;
+    }
+
+    if (ev.x < main_x || ev.y < 2)
+        return;
+
+    if (current_panel != PANEL_NOTE) {
+        total = panel_item_count();
+        idx = panel_scroll + ev.y - 2;
+        if (idx >= 0 && idx < total) {
+            panel_selected = idx;
+            if (mouse_left_double_click(ev.bstate))
+                handle_panel_key('\n');
+        }
+        return;
+    }
+
+    if (current_note < 0)
+        return;
+    line = note_scroll + ev.y - 2;
+    if (read_mode) {
+        render_note_cache(content_width());
+        if (line >= 0 && line < rendered_line_count) {
+            if (rendered_lines[line].link_index >= 0)
+                selected_link = rendered_lines[line].link_index;
+            if (mouse_left_double_click(ev.bstate)
+                && rendered_lines[line].link_index >= 0)
+                follow_link(rendered_lines[line].link_index);
+        }
+    } else if (line >= 0 && line < view_line_count) {
+        int link_idx = first_link_on_line(line);
+
+        if (link_idx >= 0)
+            selected_link = link_idx;
+        if (mouse_left_double_click(ev.bstate) && link_idx >= 0)
+            follow_link(link_idx);
+    }
+}
+#endif
+
 static void handle_main_key(int ch)
 {
     int visible_total = sidebar_item_count;
     int idx;
     char input[MAX_TITLE];
     SidebarItem *item;
+
+#ifdef KEY_MOUSE
+    if (ch == KEY_MOUSE) {
+        status_msg[0] = '\0';
+        handle_main_mouse();
+        return;
+    }
+#endif
 
     if (current_panel != PANEL_NOTE) {
         handle_panel_key(ch);
@@ -4181,6 +4442,40 @@ static void init_theme(void)
     bkgd(COLOR_PAIR(1));
 }
 
+#ifdef KEY_MOUSE
+static void init_mouse(void)
+{
+    mmask_t mask = 0;
+
+#ifdef BUTTON1_CLICKED
+    mask |= BUTTON1_CLICKED;
+#endif
+#ifdef BUTTON1_PRESSED
+    mask |= BUTTON1_PRESSED;
+#endif
+#ifdef BUTTON1_DOUBLE_CLICKED
+    mask |= BUTTON1_DOUBLE_CLICKED;
+#endif
+#ifdef BUTTON4_PRESSED
+    mask |= BUTTON4_PRESSED;
+#endif
+#ifdef BUTTON4_CLICKED
+    mask |= BUTTON4_CLICKED;
+#endif
+#ifdef BUTTON5_PRESSED
+    mask |= BUTTON5_PRESSED;
+#endif
+#ifdef BUTTON5_CLICKED
+    mask |= BUTTON5_CLICKED;
+#endif
+    if (mask)
+        mousemask(mask, NULL);
+#ifdef NCURSES_MOUSE_VERSION
+    mouseinterval(200);
+#endif
+}
+#endif
+
 int main(int argc, char **argv)
 {
     int ch;
@@ -4221,6 +4516,9 @@ int main(int argc, char **argv)
     noecho();
     keypad(stdscr, TRUE);
     init_theme();
+#ifdef KEY_MOUSE
+    init_mouse();
+#endif
     curs_set(0);
 
     if (case_equals(startup_mode, "daily"))

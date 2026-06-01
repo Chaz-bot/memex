@@ -30,8 +30,12 @@ The program uses `curses.h` and common curses behaviors such as:
 - `init_pair`
 - `A_REVERSE`
 - `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_NPAGE`, `KEY_PPAGE`, `KEY_ENTER`
+- `KEY_MOUSE`, `mousemask`, and `getmouse` when mouse support is available
 
 That is workable on DOS only if you replace `ncurses` with a DOS-compatible curses implementation, most likely `PDCurses`.
+PDCurses can translate the DOS console's serial or PS/2 mouse driver events into
+the curses mouse API used by `memex`; without that support, the program falls
+back to keyboard-only input.
 
 ### 2. POSIX directory traversal
 

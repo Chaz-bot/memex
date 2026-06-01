@@ -9,6 +9,7 @@ Slackware 4.0 and run acceptably on a Pocket 386 class machine with a 386SX and
 
 - Plain `.md` notes in nested folders.
 - Vim-like movement keys plus arrow keys where curses supports them.
+- Mouse support where curses/PDCurses exposes serial or PS/2 mouse events.
 - Create, rename, trash, and edit notes.
 - YAML frontmatter for `title`, `tags`, `aliases`, and `pinned`.
 - Tag browser/filter, pinned notes, recent notes, and sortable folder tree sidebar.
@@ -82,6 +83,20 @@ directories are created.
 - `Ctrl-F`: find within the current note while editing
 - `Tab` in editor: autocomplete note titles inside `[[...]]`
 - `Ctrl-C` or `q`: quit
+
+## Mouse
+
+Mouse input is optional and depends on the curses runtime and terminal/console
+driver. When available:
+
+- Wheel: scroll the active note/panel; over the sidebar, move the note selection
+- Left click in the sidebar: select a note or folder
+- Double-click in the sidebar: open the selected note or expand/collapse a folder
+- Left click in result/palette/backlink/tag panels: select an item
+- Double-click in those panels: activate the selected item
+- Left click a note link line: select that link
+- Double-click a note link line: follow that link
+- In the editor, left click positions the cursor and the wheel scrolls lines
 
 ## Limits
 
