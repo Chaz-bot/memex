@@ -9,11 +9,13 @@ Slackware 4.0 and run acceptably on a Pocket 386 class machine with a 386SX and
 
 - Plain `.md` notes in one directory.
 - Vim-like movement keys plus arrow keys where curses supports them.
-- Create, rename, delete, and edit notes.
-- Toggle between read mode with rendered markdown and write mode with raw markdown.
+- Create, rename, trash, and edit notes.
+- Toggle between read mode with wrapped rendered markdown and write mode with raw markdown.
 - Search note titles.
-- Follow `[[wiki links]]`.
-- Show backlinks by scanning notes on demand.
+- Full-text search across note contents with jumpable results.
+- Follow `[[wiki links]]`, including `[[Note|Alias]]` and `[[Note#Heading]]`.
+- Show backlinks and heading outlines on demand.
+- Persist last-opened note, sidebar visibility, and preferred read/write mode.
 - Tiny line-based editor with bounded memory use.
 
 ## Build
@@ -42,15 +44,18 @@ directories are created.
 ## Keys
 
 - `j/k` or arrows: move selection / editor cursor
-- `Enter`: open selected note; on the already-open note, follow selected link
+- `Enter`: open selected note; on the already-open note, follow the selected link or chosen result
 - `n`: create note
 - `m`: toggle read/write note view
 - `e`: edit open note
+- `f`: full-text search note contents
+- `o`: show heading outline for the open note
 - `r`: rename note
-- `d`: delete note
+- `d`: move note to `.trash/`
 - `/`: filter note titles
 - `b`: show backlinks for the open note
 - `s`: show/hide the notes sidebar
+- `Tab` / `Shift-Tab`: move link selection inside the open note
 - `Esc`: leave editor/filter/backlinks
 - `Ctrl-X`: save and exit editor
 - `Ctrl-C` or `q`: quit
@@ -65,3 +70,6 @@ The defaults are intentionally small:
 - Maximum line length: 240 bytes
 
 These are compile-time constants near the top of `memex.c`.
+
+Runtime state is stored in `.memex-state` inside the note directory, and
+deleted notes are moved into `.trash/` under that same directory.

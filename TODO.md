@@ -7,30 +7,30 @@ Roadmap for closing the biggest Obsidian-style feature gaps while keeping
 
 Focus: complete the core note-reading and note-finding workflow.
 
-- [ ] Full-text search across note contents.
-  - Show results in a dedicated list with short context snippets.
-  - Support jumping directly from a result into the target note.
-- [ ] Improve read mode rendering.
-  - Add soft wrapping for paragraphs.
-  - Render nested bullet lists and nested checklists more clearly.
-  - Distinguish inline code from normal text.
-  - Improve heading spacing and section separation.
-- [ ] Add outline navigation from markdown headings.
-  - Build a per-note heading index when loading a note.
-  - Let users jump to a heading from a small outline pane or list.
-- [ ] Expand wiki-link handling.
-  - Support aliased links like `[[Note|Label]]`.
-  - Support heading links like `[[Note#Heading]]`.
-  - Replace number-only link following with cursor or selection-based navigation.
-- [ ] Make rename update inbound wiki links.
-  - Scan notes for `[[Old Title]]` references and rewrite them safely.
-  - Keep the existing file rename behavior.
-- [ ] Replace hard delete with trash/archive behavior.
-  - Move deleted notes into a configurable trash folder inside the note root.
-- [ ] Persist lightweight UI state.
-  - Restore last-opened note.
-  - Restore sidebar visibility.
-  - Restore preferred read/write mode.
+- [x] Full-text search across note contents.
+  - [x] Show results in a dedicated list with short context snippets.
+  - [x] Support jumping directly from a result into the target note.
+- [x] Improve read mode rendering.
+  - [x] Add soft wrapping for paragraphs.
+  - [x] Render nested bullet lists and nested checklists more clearly.
+  - [x] Distinguish inline code from normal text.
+  - [x] Improve heading spacing and section separation.
+- [x] Add outline navigation from markdown headings.
+  - [x] Build a per-note heading index when loading a note.
+  - [x] Let users jump to a heading from a small outline pane or list.
+- [x] Expand wiki-link handling.
+  - [x] Support aliased links like `[[Note|Label]]`.
+  - [x] Support heading links like `[[Note#Heading]]`.
+  - [x] Replace number-only link following with cursor or selection-based navigation.
+- [x] Make rename update inbound wiki links.
+  - [x] Scan notes for `[[Old Title]]` references and rewrite them safely.
+  - [x] Keep the existing file rename behavior.
+- [x] Replace hard delete with trash/archive behavior.
+  - [x] Move deleted notes into a configurable trash folder inside the note root.
+- [x] Persist lightweight UI state.
+  - [x] Restore last-opened note.
+  - [x] Restore sidebar visibility.
+  - [x] Restore preferred read/write mode.
 
 ## v0.3
 
@@ -65,7 +65,7 @@ Focus: improve organization and editing ergonomics.
   - Back/forward through recently opened notes.
 - [ ] Add recent notes and pinned notes.
 
-## v1.0
+## v0.4
 
 Focus: turn `memex` into a more complete knowledge-base tool.
 
@@ -97,12 +97,12 @@ Focus: turn `memex` into a more complete knowledge-base tool.
 
 ## Recommended Build Order
 
-1. [ ] Full-text search
-2. [ ] Better read mode rendering with wrapping
-3. [ ] Heading outline and section jump
-4. [ ] Rename with wiki-link rewrite
+1. [x] Full-text search
+2. [x] Better read mode rendering with wrapping
+3. [x] Heading outline and section jump
+4. [x] Rename with wiki-link rewrite
 5. [ ] Tag support
-6. [ ] UI state persistence
+6. [x] UI state persistence
 7. [ ] Folder tree sidebar
 8. [ ] Link autocomplete
 9. [ ] Indexed search and backlinks
@@ -112,9 +112,9 @@ Focus: turn `memex` into a more complete knowledge-base tool.
 If `memex` stays intentionally small, these are the highest-value features to
 finish first:
 
-- [ ] Full-text search
-- [ ] Better read mode rendering
-- [ ] Outline view
-- [ ] Rename with link updates
+- [x] Full-text search
+- [x] Better read mode rendering
+- [x] Outline view
+- [x] Rename with link updates
 - [ ] Tags
-- [ ] UI state persistence
+- [x] UI state persistence
