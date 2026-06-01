@@ -1,0 +1,191 @@
+# DOS Port TODO
+
+Action checklist for porting `memex` to DOS while keeping the Linux build
+working. The first target is DJGPP plus PDCurses on a 386SX / 8 MB class
+machine.
+
+## Ground Rules
+
+- [ ] Keep the DOS work on the `dos-port` branch.
+- [ ] Keep Linux behavior buildable while platform code is introduced.
+- [ ] Prefer a small platform layer over scattered DOS-specific conditionals.
+- [ ] Target 32-bit protected-mode DOS first, not 16-bit real-mode DOS.
+- [ ] Require long filename support for the first working port.
+- [ ] Defer feature trimming until after there is a measurable DOS build.
+
+## Phase 1: Establish The DOS Build Target
+
+- [ ] Install or identify a DJGPP build environment.
+- [ ] Install or build PDCurses for the same DJGPP environment.
+- [ ] Confirm the expected DOS runtime target:
+  - [ ] FreeDOS, MS-DOS, or emulator.
+  - [ ] DPMI provider available.
+  - [ ] Long filename support available.
+  - [ ] Mouse driver expectations, if mouse support matters.
+- [ ] Document exact compiler, curses, and DOS runtime versions.
+- [ ] Add a small `build-dos.bat` or `Makefile.dj` for the DOS build.
+- [ ] Add `-DMEMEX_DOS_PROFILE` to the DOS build flags.
+- [ ] Link the DOS build against PDCurses.
+- [ ] Keep the existing Linux `Makefile` path intact.
+
+## Phase 2: Split Configuration Limits
+
+- [ ] Move compile-time limits out of `memex.c` into a config header.
+- [ ] Add a normal profile matching the current Linux limits.
+- [ ] Add a DOS profile with smaller limits:
+  - [ ] `PATH_MAX`: `1024 -> 260`
+  - [ ] `MAX_NOTES`: `512 -> 128`
+  - [ ] `MAX_LINES`: `2048 -> 1024`
+  - [ ] `MAX_RENDERED`: `8192 -> 2048`
+  - [ ] `MAX_RESULTS`: `256 -> 96`
+  - [ ] `MAX_BACKLINKS`: `256 -> 96`
+  - [ ] `MAX_MENTIONS`: `256 -> 96`
+  - [ ] `MAX_DIRS`: `256 -> 96`
+  - [ ] `MAX_SIDEBAR_ITEMS`: `1024 -> 256`
+  - [ ] `MAX_HISTORY`: `128 -> 32`
+  - [ ] `MAX_SAVED_SEARCHES`: `32 -> 16`
+- [ ] Build and run the Linux build after moving the constants.
+- [ ] Measure static/global memory usage for both profiles.
+
+## Phase 3: Add A Platform Layer
+
+- [ ] Add `platform.h`.
+- [ ] Add `platform_posix.c`.
+- [ ] Add `platform_dos.c`.
+- [ ] Move current directory lookup behind `platform_getcwd`.
+- [ ] Move directory creation behind `platform_mkdir`.
+- [ ] Move file existence checks behind `platform_file_exists`.
+- [ ] Move directory checks behind `platform_is_dir`.
+- [ ] Move rename operations behind `platform_rename`.
+- [ ] Add `platform_path_sep`.
+- [ ] Add path normalization helpers.
+- [ ] Add a directory iterator API:
+  - [ ] `platform_opendir`
+  - [ ] `platform_readdir`
+  - [ ] `platform_closedir`
+- [ ] Replace direct `opendir`, `readdir`, and `closedir` usage.
+- [ ] Replace direct `getcwd`, `mkdir`, `stat`, and `rename` usage.
+- [ ] Keep POSIX behavior identical after wrapper replacement.
+
+## Phase 4: Normalize Paths And Names
+
+- [ ] Centralize path joining.
+- [ ] Normalize `/` and `\` handling.
+- [ ] Audit every direct string append involving paths.
+- [ ] Confirm nested note directories work through the platform layer.
+- [ ] Decide DOS names for dot-prefixed support files:
+  - [ ] `.memex-state`
+  - [ ] `.memexrc`
+  - [ ] `.memex-searches`
+  - [ ] `.memex-daily-format`
+  - [ ] `.trash`
+  - [ ] `.templates`
+- [ ] Either keep dot names under long filename DOS or add DOS-safe aliases.
+- [ ] Audit filename validation for reserved DOS device names.
+- [ ] Audit maximum path and component length handling.
+
+## Phase 5: Isolate Curses Usage
+
+- [ ] Add a curses compatibility header, such as `ui_curses.h`.
+- [ ] Include curses through the compatibility header only.
+- [ ] Centralize color initialization.
+- [ ] Centralize keyboard normalization.
+- [ ] Normalize Enter, Backspace, Tab, Shift-Tab, Escape, and function-key behavior.
+- [ ] Confirm arrow, page up, page down, home, and end keys under PDCurses.
+- [ ] Gate mouse support behind a compile-time capability check.
+- [ ] Confirm keyboard-only operation works without mouse support.
+- [ ] Keep Linux ncurses behavior unchanged.
+
+## Phase 6: First DOS Compile
+
+- [ ] Build with DJGPP and PDCurses.
+- [ ] Fix compiler errors without changing user-facing behavior.
+- [ ] Fix missing headers and incompatible declarations.
+- [ ] Fix C library differences found by DJGPP.
+- [ ] Confirm the executable starts and exits cleanly.
+- [ ] Confirm startup creates or opens the note directory.
+- [ ] Confirm no large unexpected allocations fail at startup.
+- [ ] Record executable size and available memory.
+
+## Phase 7: Core Runtime Smoke Tests
+
+- [ ] Open an empty note directory.
+- [ ] Create a note.
+- [ ] Edit and save a note.
+- [ ] Reopen the saved note.
+- [ ] Create a nested directory note if nested folders remain enabled.
+- [ ] Rename a note.
+- [ ] Trash a note.
+- [ ] Follow a simple `[[wiki link]]`.
+- [ ] Follow an aliased `[[Note|Label]]` link.
+- [ ] Follow a heading `[[Note#Heading]]` link.
+- [ ] Search by title.
+- [ ] Run full-text search.
+- [ ] Open backlinks.
+- [ ] Open tags.
+- [ ] Open outline.
+- [ ] Open command palette.
+- [ ] Quit with and without unsaved changes.
+
+## Phase 8: Persistence And Config Tests
+
+- [ ] Save and restore `.memex-state`.
+- [ ] Save and restore sidebar visibility.
+- [ ] Save and restore read/write mode.
+- [ ] Load `.memexrc`.
+- [ ] Confirm keybinding overrides work.
+- [ ] Confirm theme selection works.
+- [ ] Confirm saved searches load and save.
+- [ ] Confirm templates load from the template directory.
+- [ ] Confirm daily note naming works.
+
+## Phase 9: Performance And Memory Pass
+
+- [ ] Test with 25 notes.
+- [ ] Test with 100 notes.
+- [ ] Test with maximum DOS-profile note count.
+- [ ] Test with a large note near `MAX_NOTE_BYTES`.
+- [ ] Measure startup time.
+- [ ] Measure note switching time.
+- [ ] Measure full-text search time.
+- [ ] Measure memory after indexing.
+- [ ] Measure memory while editing a large note.
+- [ ] Reduce limits further if the target machine is unstable.
+- [ ] Consider lazy indexing if startup or memory is too expensive.
+
+## Phase 10: Feature Triage If Needed
+
+- [ ] Make saved searches optional if memory is tight.
+- [ ] Make unlinked mentions optional if indexing is too expensive.
+- [ ] Reduce backlink and mention limits if needed.
+- [ ] Reduce rendered line cache size if needed.
+- [ ] Reduce full-text search result count if needed.
+- [ ] Reduce folder sidebar detail if needed.
+- [ ] Consider disabling transclusion in the DOS profile if recursion or memory is problematic.
+- [ ] Consider disabling mouse support if it complicates PDCurses portability.
+
+## Phase 11: Documentation
+
+- [ ] Update `README.md` with DOS build status.
+- [ ] Add DOS build prerequisites.
+- [ ] Add DOS build commands.
+- [ ] Add DOS runtime requirements.
+- [ ] Document long filename requirement.
+- [ ] Document tested DOS environments.
+- [ ] Document known missing or reduced features.
+- [ ] Document recommended memory limits.
+- [ ] Document troubleshooting for PDCurses and DPMI errors.
+
+## Phase 12: Release Criteria
+
+- [ ] Linux build still passes a basic smoke test.
+- [ ] DOS build produces an executable.
+- [ ] DOS executable runs on the intended machine or emulator.
+- [ ] Keyboard navigation works.
+- [ ] Create, edit, save, rename, trash, and reopen notes work.
+- [ ] Links, backlinks, tags, outline, and search work at DOS-profile limits.
+- [ ] State and config persistence work.
+- [ ] Performance is acceptable on the target hardware.
+- [ ] Memory use is stable after repeated open/edit/search cycles.
+- [ ] `DOS_PORT.md` matches the implemented design.
+- [ ] `DOS_TODO.md` reflects remaining known work.
