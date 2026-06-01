@@ -62,6 +62,7 @@ static int link_count = 0;
 static int selected_link = 0;
 static int show_backlinks = 0;
 static int show_sidebar = 1;
+static int read_mode = 1;
 static int running = 1;
 
 static char edit_lines[MAX_LINES][MAX_LINE + 1];
@@ -239,6 +240,175 @@ static void scan_links_in_line(const char *line, int line_no)
         }
         p = end + 2;
     }
+}
+
+static int is_blank_line(const char *s)
+{
+    while (*s) {
+        if (!isspace((unsigned char)*s))
+            return 0;
+        s++;
+    }
+    return 1;
+}
+
+static int is_rule_line(const char *s)
+{
+    int count = 0;
+
+    while (*s == ' ' || *s == '\t')
+        s++;
+    while (*s == '-' || *s == '*' || *s == '_') {
+        count++;
+        s++;
+    }
+    while (*s == ' ' || *s == '\t')
+        s++;
+    return *s == '\0' && count >= 3;
+}
+
+static void append_char(char *dst, size_t dst_size, size_t *out_len, char ch)
+{
+    if (*out_len + 1 >= dst_size)
+        return;
+    dst[*out_len] = ch;
+    (*out_len)++;
+    dst[*out_len] = '\0';
+}
+
+static void format_inline_markdown(const char *src, char *dst, size_t dst_size)
+{
+    size_t out_len = 0;
+    const char *end;
+    const char *paren_end;
+    const char *q;
+
+    dst[0] = '\0';
+    while (*src) {
+        if (src[0] == '[' && src[1] == '[') {
+            end = strstr(src + 2, "]]");
+            if (end) {
+                for (q = src + 2; q < end; q++)
+                    append_char(dst, dst_size, &out_len, *q);
+                src = end + 2;
+                continue;
+            }
+        }
+        if ((src[0] == '*' && src[1] == '*')
+            || (src[0] == '_' && src[1] == '_')
+            || (src[0] == '~' && src[1] == '~')) {
+            src += 2;
+            continue;
+        }
+        if (*src == '*' || *src == '_' || *src == '`') {
+            src++;
+            continue;
+        }
+        if (*src == '[') {
+            end = strchr(src + 1, ']');
+            if (end && end[1] == '(') {
+                paren_end = strchr(end + 2, ')');
+                if (paren_end) {
+                    while (++src < end)
+                        append_char(dst, dst_size, &out_len, *src);
+                    src = paren_end + 1;
+                    continue;
+                }
+            }
+        }
+        append_char(dst, dst_size, &out_len, *src);
+        src++;
+    }
+}
+
+static void format_markdown_line(const char *src, char *dst, size_t dst_size,
+                                 int *attr, int *in_code_block)
+{
+    int heading_level = 0;
+    const char *p = src;
+
+    *attr = A_NORMAL;
+    dst[0] = '\0';
+
+    while (*p == ' ' || *p == '\t')
+        p++;
+
+    if (strcmp(p, "```") == 0) {
+        *in_code_block = !*in_code_block;
+        return;
+    }
+
+    if (*in_code_block) {
+        copy_string(dst, dst_size, src);
+        *attr = A_DIM;
+        return;
+    }
+
+    if (is_blank_line(src))
+        return;
+
+    if (is_rule_line(src)) {
+        copy_string(dst, dst_size,
+                    "----------------------------------------");
+        *attr = A_DIM;
+        return;
+    }
+
+    while (p[heading_level] == '#')
+        heading_level++;
+    if (heading_level > 0 && p[heading_level] == ' ') {
+        format_inline_markdown(p + heading_level + 1, dst, dst_size);
+        *attr = A_BOLD;
+        return;
+    }
+
+    if ((p[0] == '-' || p[0] == '*')
+        && p[1] == ' ' && p[2] == '['
+        && (p[3] == ' ' || p[3] == 'x' || p[3] == 'X')
+        && p[4] == ']' && p[5] == ' ') {
+        if (p[3] == ' ')
+            copy_string(dst, dst_size, "[ ] ");
+        else
+            copy_string(dst, dst_size, "[x] ");
+        format_inline_markdown(p + 6, dst + 4, dst_size - 4);
+        return;
+    }
+
+    if ((p[0] == '-' || p[0] == '*' || p[0] == '+') && p[1] == ' ') {
+        copy_string(dst, dst_size, "* ");
+        format_inline_markdown(p + 2, dst + 2, dst_size - 2);
+        return;
+    }
+
+    if (p[0] == '>') {
+        copy_string(dst, dst_size, "| ");
+        if (p[1] == ' ')
+            format_inline_markdown(p + 2, dst + 2, dst_size - 2);
+        else
+            format_inline_markdown(p + 1, dst + 2, dst_size - 2);
+        *attr = A_DIM;
+        return;
+    }
+
+    if (isdigit((unsigned char)p[0])) {
+        size_t out_len = 0;
+        const char *q = p;
+
+        while (isdigit((unsigned char)*q))
+            q++;
+        if (*q == '.' && q[1] == ' ') {
+            while (p < q) {
+                append_char(dst, dst_size, &out_len, *p);
+                p++;
+            }
+            append_char(dst, dst_size, &out_len, '.');
+            append_char(dst, dst_size, &out_len, ' ');
+            format_inline_markdown(q + 2, dst + out_len, dst_size - out_len);
+            return;
+        }
+    }
+
+    format_inline_markdown(src, dst, dst_size);
 }
 
 static void load_note_view(int idx)
@@ -505,7 +675,9 @@ static void draw_header(void)
     attron(A_REVERSE);
     move(0, 0);
     clrtoeol();
-    printw(" memex  dir:%s  /:%s", note_dir, note_filter[0] ? note_filter : "-");
+    printw(" memex  mode:%s  dir:%s  /:%s",
+           read_mode ? "read" : "write",
+           note_dir, note_filter[0] ? note_filter : "-");
     attroff(A_REVERSE);
 }
 
@@ -515,7 +687,7 @@ static void draw_status(void)
     move(LINES - 1, 0);
     clrtoeol();
     printw(" %s", status_msg[0] ? status_msg :
-           "n new  Enter open/link  e edit  b backlinks  s sidebar  / search  q quit");
+           "m mode  n new  Enter open/link  e edit  b backlinks  s sidebar  / search  q quit");
     attroff(A_REVERSE);
 }
 
@@ -552,18 +724,33 @@ static void draw_notes(int width)
 static void draw_note_text(int x, int width)
 {
     int y, i, body_h = LINES - 3;
+    int attr;
+    int in_code_block = 0;
+    char rendered[MAX_LINE + 1];
     char label[16];
 
     if (current_note < 0) {
         mvprintw(1, x, "No note open");
         return;
     }
-    mvprintw(1, x, "%s", notes[current_note].title);
+    mvprintw(1, x, "%s [%s]",
+             notes[current_note].title,
+             read_mode ? "read" : "write");
     for (y = 0; y < body_h; y++) {
         i = note_scroll + y;
         if (i >= view_line_count)
             break;
-        mvprintw(y + 2, x, "%-*.*s", width, width, view_lines[i]);
+        if (read_mode) {
+            format_markdown_line(view_lines[i], rendered, sizeof(rendered),
+                                 &attr, &in_code_block);
+            if (attr != A_NORMAL)
+                attron(attr);
+            mvprintw(y + 2, x, "%-*.*s", width, width, rendered);
+            if (attr != A_NORMAL)
+                attroff(attr);
+        } else {
+            mvprintw(y + 2, x, "%-*.*s", width, width, view_lines[i]);
+        }
     }
 
     for (i = 0; i < link_count && i < 9; i++) {
@@ -862,6 +1049,8 @@ static void handle_main_key(int ch)
         show_backlinks = 0;
     } else if (ch == 'b') {
         show_backlinks = !show_backlinks;
+    } else if (ch == 'm') {
+        read_mode = !read_mode;
     } else if (ch == 's') {
         show_sidebar = !show_sidebar;
     }
@@ -895,7 +1084,7 @@ int main(int argc, char **argv)
     keypad(stdscr, TRUE);
     curs_set(0);
 
-    set_status("n new  Enter open/link  e edit  b backlinks  s sidebar  / search  q quit");
+    set_status("m mode  n new  Enter open/link  e edit  b backlinks  s sidebar  / search  q quit");
     while (running) {
         draw_main();
         ch = getch();

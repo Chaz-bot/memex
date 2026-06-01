@@ -10,6 +10,7 @@ Slackware 4.0 and run acceptably on a Pocket 386 class machine with a 386SX and
 - Plain `.md` notes in one directory.
 - Vim-like movement keys plus arrow keys where curses supports them.
 - Create, rename, delete, and edit notes.
+- Toggle between read mode with rendered markdown and write mode with raw markdown.
 - Search note titles.
 - Follow `[[wiki links]]`.
 - Show backlinks by scanning notes on demand.
@@ -43,6 +44,7 @@ directories are created.
 - `j/k` or arrows: move selection / editor cursor
 - `Enter`: open selected note; on the already-open note, follow selected link
 - `n`: create note
+- `m`: toggle read/write note view
 - `e`: edit open note
 - `r`: rename note
 - `d`: delete note
