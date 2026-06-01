@@ -48,6 +48,7 @@ directories are created.
 - `d`: delete note
 - `/`: filter note titles
 - `b`: show backlinks for the open note
+- `s`: show/hide the notes sidebar
 - `Esc`: leave editor/filter/backlinks
 - `Ctrl-X`: save and exit editor
 - `Ctrl-C` or `q`: quit

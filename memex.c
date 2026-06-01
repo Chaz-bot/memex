@@ -61,6 +61,7 @@ static Link links[MAX_LINKS];
 static int link_count = 0;
 static int selected_link = 0;
 static int show_backlinks = 0;
+static int show_sidebar = 1;
 static int running = 1;
 
 static char edit_lines[MAX_LINES][MAX_LINE + 1];
@@ -514,7 +515,7 @@ static void draw_status(void)
     move(LINES - 1, 0);
     clrtoeol();
     printw(" %s", status_msg[0] ? status_msg :
-           "n new  Enter open/link  e edit  b backlinks  / search  q quit");
+           "n new  Enter open/link  e edit  b backlinks  s sidebar  / search  q quit");
     attroff(A_REVERSE);
 }
 
@@ -616,17 +617,21 @@ static void draw_main(void)
     int left_w = COLS / 3;
     int x, y;
 
-    if (left_w < 20)
-        left_w = 20;
-    if (left_w > COLS - 20)
-        left_w = COLS / 2;
-
     erase();
     draw_header();
-    draw_notes(left_w);
-    for (y = 1; y < LINES - 1; y++)
-        mvaddch(y, left_w, ACS_VLINE);
-    x = left_w + 2;
+    if (show_sidebar) {
+        if (left_w < 20)
+            left_w = 20;
+        if (left_w > COLS - 20)
+            left_w = COLS / 2;
+
+        draw_notes(left_w);
+        for (y = 1; y < LINES - 1; y++)
+            mvaddch(y, left_w, ACS_VLINE);
+        x = left_w + 2;
+    } else {
+        x = 0;
+    }
     if (show_backlinks)
         draw_backlinks(x, COLS - x - 1);
     else
@@ -857,6 +862,8 @@ static void handle_main_key(int ch)
         show_backlinks = 0;
     } else if (ch == 'b') {
         show_backlinks = !show_backlinks;
+    } else if (ch == 's') {
+        show_sidebar = !show_sidebar;
     }
 }
 
@@ -888,7 +895,7 @@ int main(int argc, char **argv)
     keypad(stdscr, TRUE);
     curs_set(0);
 
-    set_status("n new  Enter open/link  e edit  b backlinks  / search  q quit");
+    set_status("n new  Enter open/link  e edit  b backlinks  s sidebar  / search  q quit");
     while (running) {
         draw_main();
         ch = getch();
