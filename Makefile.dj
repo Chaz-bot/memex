@@ -20,9 +20,13 @@ check-syntax: memex.c memex_config.h platform.h platform_dos.c ui_curses.h
 	$(CC) $(CFLAGS) -c memex.c
 	$(CC) $(CFLAGS) -c platform_dos.c
 
+check-triage: memex.c memex_config.h platform.h platform_dos.c ui_curses.h
+	$(CC) $(CFLAGS) -DMEMEX_DISABLE_SAVED_SEARCHES -DMEMEX_DISABLE_MENTIONS -DMEMEX_DISABLE_TRANSCLUSION -DMEMEX_DISABLE_MOUSE -c memex.c
+	$(CC) $(CFLAGS) -DMEMEX_DISABLE_SAVED_SEARCHES -DMEMEX_DISABLE_MENTIONS -DMEMEX_DISABLE_TRANSCLUSION -DMEMEX_DISABLE_MOUSE -c platform_dos.c
+
 clean:
 	if exist $(EXE) del $(EXE)
 	if exist memex.o del memex.o
 	if exist platform_dos.o del platform_dos.o
 
-.PHONY: all check-syntax clean
+.PHONY: all check-syntax check-triage clean

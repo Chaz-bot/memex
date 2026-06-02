@@ -166,15 +166,15 @@ machine.
 
 ## Phase 11: Documentation
 
-- [ ] Update `README.md` with DOS build status.
-- [ ] Add DOS build prerequisites.
-- [ ] Add DOS build commands.
-- [ ] Add DOS runtime requirements.
-- [ ] Document long filename requirement.
-- [ ] Document tested DOS environments.
-- [ ] Document known missing or reduced features.
-- [ ] Document recommended memory limits.
-- [ ] Document troubleshooting for PDCurses and DPMI errors.
+- [x] Update `README.md` with DOS build status.
+- [x] Add DOS build prerequisites.
+- [x] Add DOS build commands.
+- [x] Add DOS runtime requirements.
+- [x] Document long filename requirement.
+- [x] Document tested DOS environments.
+- [x] Document known missing or reduced features.
+- [x] Document recommended memory limits.
+- [x] Document troubleshooting for PDCurses and DPMI errors.
 
 ## Phase 12: Release Criteria
 

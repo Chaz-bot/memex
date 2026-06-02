@@ -79,4 +79,22 @@
 #define DAILY_TEMPLATE "daily.md"
 #define DAILY_FORMAT_FILE ".memex-daily-format"
 
+#ifdef MEMEX_DISABLE_SAVED_SEARCHES
+#define MEMEX_ENABLE_SAVED_SEARCHES 0
+#else
+#define MEMEX_ENABLE_SAVED_SEARCHES 1
+#endif
+
+#ifdef MEMEX_DISABLE_MENTIONS
+#define MEMEX_ENABLE_MENTIONS 0
+#else
+#define MEMEX_ENABLE_MENTIONS 1
+#endif
+
+#ifdef MEMEX_DISABLE_TRANSCLUSION
+#define MEMEX_ENABLE_TRANSCLUSION 0
+#else
+#define MEMEX_ENABLE_TRANSCLUSION 1
+#endif
+
 #endif
