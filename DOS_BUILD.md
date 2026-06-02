@@ -57,3 +57,10 @@ Phase 3 adds `platform.h`, `platform_posix.c`, and `platform_dos.c`. The Linux
 build links `platform_posix.c`; the DJGPP build links `platform_dos.c`. Direct
 directory traversal, current-directory lookup, directory creation, stat checks,
 and rename calls from `memex.c` now go through the platform layer.
+
+Phase 4 keeps note-relative paths normalized with `/` internally and converts
+to the platform separator when building filesystem paths. DOS still requires
+long filename support for the first port, so dot-prefixed support names such as
+`.memex-state`, `.memexrc`, `.trash`, and `.templates` are intentionally kept.
+New note titles are sanitized for DOS-reserved device names and trailing
+dot/space characters.

@@ -431,7 +431,10 @@ static int path_depth(const char *path)
 static const char *path_basename(const char *path)
 {
     const char *slash = strrchr(path, '/');
+    const char *backslash = strrchr(path, '\\');
 
+    if (backslash && (!slash || backslash > slash))
+        slash = backslash;
     return slash ? slash + 1 : path;
 }
 
@@ -609,18 +612,87 @@ static void append_platform_sep(char *out, size_t out_size)
     append_string(out, out_size, sep);
 }
 
+static int is_path_sep(char ch)
+{
+    return ch == '/' || ch == '\\';
+}
+
+static void strip_trailing_platform_seps(char *path)
+{
+    size_t len;
+
+    len = strlen(path);
+    while (len > 1 && is_path_sep(path[len - 1])) {
+        if (len == 3 && path[1] == ':')
+            break;
+        path[--len] = '\0';
+    }
+}
+
+static void append_platform_path_part(char *out, size_t out_size, const char *part)
+{
+    size_t i;
+
+    if (!part || !*part)
+        return;
+    if (out[0] && !is_path_sep(out[strlen(out) - 1]))
+        append_platform_sep(out, out_size);
+    while (is_path_sep(*part))
+        part++;
+    for (i = 0; part[i]; i++) {
+        if (is_path_sep(part[i])) {
+            append_platform_sep(out, out_size);
+        } else {
+            char ch[2];
+
+            ch[0] = part[i];
+            ch[1] = '\0';
+            append_string(out, out_size, ch);
+        }
+    }
+}
+
 static void make_path(char *out, size_t out_size, const char *file)
 {
     copy_string(out, out_size, note_dir);
-    append_platform_sep(out, out_size);
-    append_string(out, out_size, file);
+    append_platform_path_part(out, out_size, file);
 }
 
 static void make_special_path(char *out, size_t out_size, const char *name)
 {
     copy_string(out, out_size, note_dir);
-    append_platform_sep(out, out_size);
-    append_string(out, out_size, name);
+    append_platform_path_part(out, out_size, name);
+}
+
+static int is_dos_reserved_name(const char *name)
+{
+    char base[MAX_TITLE];
+    size_t i;
+    size_t len;
+
+    copy_string(base, sizeof(base), name);
+    for (i = 0; base[i]; i++) {
+        if (base[i] == '.') {
+            base[i] = '\0';
+            break;
+        }
+    }
+    if (case_equals(base, "CON") || case_equals(base, "PRN")
+        || case_equals(base, "AUX") || case_equals(base, "NUL"))
+        return 1;
+    len = strlen(base);
+    if (len == 4 && base[3] >= '1' && base[3] <= '9'
+        && (case_equals(base, "COM1") || case_equals(base, "COM2")
+            || case_equals(base, "COM3") || case_equals(base, "COM4")
+            || case_equals(base, "COM5") || case_equals(base, "COM6")
+            || case_equals(base, "COM7") || case_equals(base, "COM8")
+            || case_equals(base, "COM9") || case_equals(base, "LPT1")
+            || case_equals(base, "LPT2") || case_equals(base, "LPT3")
+            || case_equals(base, "LPT4") || case_equals(base, "LPT5")
+            || case_equals(base, "LPT6") || case_equals(base, "LPT7")
+            || case_equals(base, "LPT8") || case_equals(base, "LPT9")))
+        return 1;
+    return 0;
 }
 
 static void sanitize_title(const char *src, char *title, size_t title_size)
@@ -641,11 +713,13 @@ static void sanitize_title(const char *src, char *title, size_t title_size)
         }
         title[o++] = c;
     }
-    while (o > 0 && isspace((unsigned char)title[o - 1]))
+    while (o > 0 && (isspace((unsigned char)title[o - 1]) || title[o - 1] == '.'))
         o--;
     title[o] = '\0';
     if (title[0] == '\0')
         copy_string(title, title_size, "Untitled");
+    if (is_dos_reserved_name(title))
+        append_string(title, title_size, "-note");
 }
 
 static void title_to_file(const char *title, char *file, size_t file_size)
@@ -2257,14 +2331,14 @@ static int prompt_text(const char *prompt, char *out, size_t out_size)
 
 static void sanitize_rel_title(const char *src, char *dst, size_t dst_size)
 {
-    char segment[MAX_TITLE];
-    char clean_segment[MAX_TITLE];
+    char segment[MAX_PATH_PART];
+    char clean_segment[MAX_PATH_PART];
     int seg_len = 0;
     size_t i;
 
     dst[0] = '\0';
     for (i = 0; src[i] && strlen(dst) + 1 < dst_size; i++) {
-        if (src[i] == '/') {
+        if (is_path_sep(src[i])) {
             segment[seg_len] = '\0';
             sanitize_title(segment, clean_segment, sizeof(clean_segment));
             if (clean_segment[0]) {
@@ -2298,6 +2372,30 @@ static int ensure_parent_dirs(const char *rel_path)
             if (!platform_mkdir(full))
                 return 0;
             *p = platform_path_sep();
+        }
+    }
+    return 1;
+}
+
+static int ensure_parent_dirs_for_path(const char *path)
+{
+    char full[MEMEX_PATH_MAX];
+    char *p;
+
+    copy_string(full, sizeof(full), path);
+    p = full;
+    if (isalpha((unsigned char)p[0]) && p[1] == ':' && is_path_sep(p[2]))
+        p += 3;
+    else if (is_path_sep(p[0]))
+        p++;
+    for (; *p; p++) {
+        if (is_path_sep(*p)) {
+            char sep = *p;
+
+            *p = '\0';
+            if (!platform_mkdir(full))
+                return 0;
+            *p = sep;
         }
     }
     return 1;
@@ -2444,21 +2542,31 @@ static void build_trash_path(const char *file, char *out, size_t out_size)
 {
     char dir_path[MEMEX_PATH_MAX];
     char candidate[MEMEX_PATH_MAX];
+    char rel_dir[MEMEX_PATH_MAX];
+    char file_name[MEMEX_PATH_MAX];
+    char numbered_name[MEMEX_PATH_MAX];
     int attempt = 0;
 
     make_special_path(dir_path, sizeof(dir_path), trash_dir_name);
+    split_rel_path(file, rel_dir, sizeof(rel_dir), file_name, sizeof(file_name));
     for (;;) {
-        if (attempt == 0) {
-            copy_string(candidate, sizeof(candidate), dir_path);
-            append_platform_sep(candidate, sizeof(candidate));
-            append_string(candidate, sizeof(candidate), file);
-        } else {
-            sprintf(candidate, "%s%c%d-%s", dir_path, platform_path_sep(), attempt, file);
+        copy_string(candidate, sizeof(candidate), dir_path);
+        append_platform_path_part(candidate, sizeof(candidate), rel_dir);
+        if (attempt == 0)
+            copy_string(numbered_name, sizeof(numbered_name), file_name);
+        else {
+            char prefix[24];
+
+            sprintf(prefix, "%d-", attempt);
+            copy_string(numbered_name, sizeof(numbered_name), prefix);
+            append_string(numbered_name, sizeof(numbered_name), file_name);
         }
+        append_platform_path_part(candidate, sizeof(candidate), numbered_name);
         if (!platform_file_exists(candidate))
             break;
         attempt++;
     }
+    ensure_parent_dirs_for_path(candidate);
     copy_string(out, out_size, candidate);
 }
 
@@ -2505,7 +2613,7 @@ static int rewrite_file_links(const char *file_name, const char *old_title,
     int changed = 0;
 
     make_path(path, sizeof(path), file_name);
-    sprintf(temp_path, "%s/.memex-rewrite.tmp", note_dir);
+    make_special_path(temp_path, sizeof(temp_path), ".memex-rewrite.tmp");
 
     in = fopen(path, "r");
     if (!in)
@@ -4455,6 +4563,7 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+    strip_trailing_platform_seps(note_dir);
 
     signal(SIGINT, on_signal);
     load_config();

@@ -69,20 +69,20 @@ machine.
 
 ## Phase 4: Normalize Paths And Names
 
-- [ ] Centralize path joining.
-- [ ] Normalize `/` and `\` handling.
-- [ ] Audit every direct string append involving paths.
-- [ ] Confirm nested note directories work through the platform layer.
-- [ ] Decide DOS names for dot-prefixed support files:
-  - [ ] `.memex-state`
-  - [ ] `.memexrc`
-  - [ ] `.memex-searches`
-  - [ ] `.memex-daily-format`
-  - [ ] `.trash`
-  - [ ] `.templates`
-- [ ] Either keep dot names under long filename DOS or add DOS-safe aliases.
-- [ ] Audit filename validation for reserved DOS device names.
-- [ ] Audit maximum path and component length handling.
+- [x] Centralize path joining.
+- [x] Normalize `/` and `\` handling.
+- [x] Audit every direct string append involving paths.
+- [x] Confirm nested note directories work through the platform layer.
+- [x] Decide DOS names for dot-prefixed support files:
+  - [x] `.memex-state`
+  - [x] `.memexrc`
+  - [x] `.memex-searches`
+  - [x] `.memex-daily-format`
+  - [x] `.trash`
+  - [x] `.templates`
+- [x] Either keep dot names under long filename DOS or add DOS-safe aliases.
+- [x] Audit filename validation for reserved DOS device names.
+- [x] Audit maximum path and component length handling.
 
 ## Phase 5: Isolate Curses Usage
 
