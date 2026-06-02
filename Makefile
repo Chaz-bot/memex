@@ -15,7 +15,11 @@ install: memex
 	install -d $(BINDIR)
 	install -m 755 memex $(BINDIR)/memex
 
+smoke: memex
+	rm -rf /tmp/memex-smoke
+	./memex --smoke-test /tmp/memex-smoke
+
 clean:
 	rm -f memex *.o core
 
-.PHONY: all install clean
+.PHONY: all install smoke clean

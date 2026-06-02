@@ -4524,6 +4524,230 @@ static void init_mouse(void)
 }
 #endif
 
+static int smoke_fail(const char *message)
+{
+    fprintf(stderr, "smoke: FAIL: %s\n", message);
+    return 0;
+}
+
+static int smoke_expect(int condition, const char *message)
+{
+    if (!condition)
+        return smoke_fail(message);
+    return 1;
+}
+
+static int smoke_write_rel_file(const char *rel_path, const char *text)
+{
+    char path[MEMEX_PATH_MAX];
+    FILE *fp;
+
+    if (!ensure_parent_dirs(rel_path))
+        return smoke_fail("could not create parent directories");
+    make_path(path, sizeof(path), rel_path);
+    fp = fopen(path, "w");
+    if (!fp)
+        return smoke_fail("could not write smoke note");
+    fputs(text, fp);
+    fclose(fp);
+    return 1;
+}
+
+static int smoke_file_contains_rel(const char *rel_path, const char *needle)
+{
+    char path[MEMEX_PATH_MAX];
+    FILE *fp;
+    char buf[MAX_LINE + 2];
+
+    make_path(path, sizeof(path), rel_path);
+    fp = fopen(path, "r");
+    if (!fp)
+        return 0;
+    while (fgets(buf, sizeof(buf), fp)) {
+        if (strstr(buf, needle)) {
+            fclose(fp);
+            return 1;
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
+static int smoke_sidebar_has_title(const char *title)
+{
+    int i;
+
+    for (i = 0; i < sidebar_item_count; i++) {
+        if (sidebar_items[i].kind == SIDEBAR_KIND_NOTE
+            && sidebar_items[i].note_index >= 0
+            && strcmp(notes[sidebar_items[i].note_index].title, title) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static int smoke_follow_link_from_alpha(const char *label_or_heading)
+{
+    int alpha_idx;
+    int target_idx;
+    int i;
+
+    alpha_idx = find_note_by_target("Alpha");
+    target_idx = find_note_by_target("Target");
+    if (!smoke_expect(alpha_idx >= 0, "could not find Alpha for link test"))
+        return 0;
+    if (!smoke_expect(target_idx >= 0, "could not find Target for link test"))
+        return 0;
+    load_note_view(alpha_idx);
+    for (i = 0; i < link_count; i++) {
+        if (strcmp(links[i].target, "Target") != 0)
+            continue;
+        if (label_or_heading[0] == '#') {
+            if (strcmp(links[i].heading, label_or_heading + 1) != 0)
+                continue;
+        } else if (strcmp(links[i].label, label_or_heading) != 0) {
+            continue;
+        }
+        follow_link(i);
+        return smoke_expect(current_note == target_idx, "link did not open Target");
+    }
+    return smoke_fail("expected link was not parsed");
+}
+
+static int run_smoke_tests(const char *dir)
+{
+    char old_path[MEMEX_PATH_MAX];
+    char new_path[MEMEX_PATH_MAX];
+    char trash_path[MEMEX_PATH_MAX];
+    int alpha_idx;
+    int target_idx;
+    int mention_idx;
+    int renamed_idx;
+
+    copy_string(note_dir, sizeof(note_dir), dir);
+    strip_trailing_platform_seps(note_dir);
+    read_mode = 0;
+    running = 1;
+    status_msg[0] = '\0';
+
+    load_notes();
+    if (!smoke_expect(platform_is_dir(note_dir), "could not open empty note directory"))
+        return 1;
+
+    if (!smoke_expect(create_note("Alpha"), "could not create Alpha"))
+        return 1;
+    if (!smoke_expect(create_note("Target"), "could not create Target"))
+        return 1;
+    if (!smoke_expect(create_note("Projects/Nested"), "could not create nested note"))
+        return 1;
+    if (!smoke_expect(smoke_write_rel_file("Target.md",
+                                           "# Section\n\nTarget body unique-phase7.\n"),
+                      "could not save Target content"))
+        return 1;
+    if (!smoke_expect(smoke_write_rel_file("Alpha.md",
+                                           "# Alpha\n\n"
+                                           "Alpha body unique-phase7 with #phase7.\n"
+                                           "[[Target]] [[Target|Alias]] [[Target#Section]]\n"),
+                      "could not edit and save Alpha"))
+        return 1;
+    if (!smoke_expect(smoke_write_rel_file("Mentioner.md",
+                                           "This note mentions Target without linking it.\n"),
+                      "could not create mention smoke note"))
+        return 1;
+
+    load_notes();
+    alpha_idx = find_note_by_target("Alpha");
+    target_idx = find_note_by_target("Target");
+    mention_idx = find_note_by_target("Mentioner");
+    if (!smoke_expect(alpha_idx >= 0, "could not reopen Alpha"))
+        return 1;
+    if (!smoke_expect(target_idx >= 0, "could not reopen Target"))
+        return 1;
+    if (!smoke_expect(mention_idx >= 0, "could not reopen Mentioner"))
+        return 1;
+    if (!smoke_expect(find_note_by_target("Nested") >= 0, "nested note was not loaded"))
+        return 1;
+
+    load_note_view(alpha_idx);
+    if (!smoke_expect(view_line_count > 0, "Alpha opened without content"))
+        return 1;
+    if (!smoke_expect(link_count >= 3, "wiki links were not parsed"))
+        return 1;
+    if (!smoke_expect(smoke_follow_link_from_alpha("Target"), "simple link follow failed"))
+        return 1;
+    if (!smoke_expect(smoke_follow_link_from_alpha("Alias"), "aliased link follow failed"))
+        return 1;
+    if (!smoke_expect(smoke_follow_link_from_alpha("#Section"), "heading link follow failed"))
+        return 1;
+
+    note_filter[0] = '\0';
+    copy_string(note_filter, sizeof(note_filter), "Target");
+    build_sidebar();
+    if (!smoke_expect(smoke_sidebar_has_title("Target"), "title filter did not find Target"))
+        return 1;
+    note_filter[0] = '\0';
+    build_sidebar();
+
+    build_note_indices();
+    run_full_text_search("unique-phase7");
+    if (!smoke_expect(search_result_count > 0, "full-text search found no results"))
+        return 1;
+
+    load_note_view(target_idx);
+    build_backlinks();
+    if (!smoke_expect(backlink_count > 0, "backlinks did not include Alpha"))
+        return 1;
+    load_note_view(mention_idx);
+    build_mentions();
+    if (!smoke_expect(mention_count > 0, "mentions did not include Target"))
+        return 1;
+    load_note_view(target_idx);
+    open_outline();
+    if (!smoke_expect(current_panel == PANEL_OUTLINE, "outline panel did not open"))
+        return 1;
+    open_tags();
+    if (!smoke_expect(current_panel == PANEL_TAGS, "tags panel did not open"))
+        return 1;
+    current_panel = PANEL_COMMANDS;
+    if (!smoke_expect(current_panel == PANEL_COMMANDS, "command palette panel did not open"))
+        return 1;
+
+    if (!smoke_expect(create_note("Old Name"), "could not create note to rename"))
+        return 1;
+    if (!smoke_expect(smoke_write_rel_file("Ref.md", "[[Old Name]]\n"),
+                      "could not create rename reference"))
+        return 1;
+    make_path(old_path, sizeof(old_path), "Old Name.md");
+    make_path(new_path, sizeof(new_path), "Renamed Note.md");
+    if (!smoke_expect(platform_rename(old_path, new_path), "could not rename note file"))
+        return 1;
+    rewrite_links_for_rename("Old Name", "Renamed Note");
+    load_notes();
+    renamed_idx = find_note_by_target("Renamed Note");
+    if (!smoke_expect(renamed_idx >= 0, "renamed note was not loaded"))
+        return 1;
+    if (!smoke_expect(smoke_file_contains_rel("Ref.md", "[[Renamed Note]]"),
+                      "rename did not update inbound link"))
+        return 1;
+
+    current_note = renamed_idx;
+    delete_current_note();
+    load_notes();
+    if (!smoke_expect(find_note_by_target("Renamed Note") < 0,
+                      "trashed note still appears in note list"))
+        return 1;
+    make_special_path(trash_path, sizeof(trash_path), trash_dir_name);
+    append_platform_path_part(trash_path, sizeof(trash_path), "Renamed Note.md");
+    if (!smoke_expect(platform_file_exists(trash_path), "trashed note file missing"))
+        return 1;
+
+    running = 0;
+    free_view();
+    free_note_indices();
+    printf("smoke: PASS\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int ch;
@@ -4532,6 +4756,19 @@ int main(int argc, char **argv)
     if (!platform_init()) {
         fprintf(stderr, "memex: could not initialize platform\n");
         return 1;
+    }
+
+    if (argc > 1 && strcmp(argv[1], "--smoke-test") == 0) {
+        int rc;
+
+        if (argc < 3) {
+            fprintf(stderr, "usage: memex --smoke-test DIR\n");
+            platform_shutdown();
+            return 2;
+        }
+        rc = run_smoke_tests(argv[2]);
+        platform_shutdown();
+        return rc;
     }
 
     if (argc > 1) {

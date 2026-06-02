@@ -89,3 +89,21 @@ example:
 ```sh
 make -f Makefile.dj CC=i586-pc-msdosdjgpp-gcc
 ```
+
+Phase 7 adds a noninteractive core runtime smoke test:
+
+```sh
+./memex --smoke-test /tmp/memex-smoke
+```
+
+On the Linux host this is also available through:
+
+```sh
+make smoke
+```
+
+The smoke test creates notes in the supplied directory, exercises open/create,
+save/reopen, nested notes, link following, title filtering, full-text search,
+backlinks, mentions, tags, outline, command-palette state, rename link rewrite,
+and trash behavior. It does not initialize curses, so it can run in a DOS
+environment once `memex.exe` links.

@@ -109,22 +109,22 @@ machine.
 
 ## Phase 7: Core Runtime Smoke Tests
 
-- [ ] Open an empty note directory.
-- [ ] Create a note.
-- [ ] Edit and save a note.
-- [ ] Reopen the saved note.
-- [ ] Create a nested directory note if nested folders remain enabled.
-- [ ] Rename a note.
-- [ ] Trash a note.
-- [ ] Follow a simple `[[wiki link]]`.
-- [ ] Follow an aliased `[[Note|Label]]` link.
-- [ ] Follow a heading `[[Note#Heading]]` link.
-- [ ] Search by title.
-- [ ] Run full-text search.
-- [ ] Open backlinks.
-- [ ] Open tags.
-- [ ] Open outline.
-- [ ] Open command palette.
+- [x] Open an empty note directory.
+- [x] Create a note.
+- [x] Edit and save a note.
+- [x] Reopen the saved note.
+- [x] Create a nested directory note if nested folders remain enabled.
+- [x] Rename a note.
+- [x] Trash a note.
+- [x] Follow a simple `[[wiki link]]`.
+- [x] Follow an aliased `[[Note|Label]]` link.
+- [x] Follow a heading `[[Note#Heading]]` link.
+- [x] Search by title.
+- [x] Run full-text search.
+- [x] Open backlinks.
+- [x] Open tags.
+- [x] Open outline.
+- [x] Open command palette.
 - [ ] Quit with and without unsaved changes.
 
 ## Phase 8: Persistence And Config Tests
