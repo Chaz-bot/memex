@@ -23,7 +23,11 @@ persistence: memex
 	rm -rf /tmp/memex-persistence
 	./memex --persistence-test /tmp/memex-persistence
 
+performance: memex
+	rm -rf /tmp/memex-performance
+	./memex --performance-test /tmp/memex-performance
+
 clean:
 	rm -f memex *.o core
 
-.PHONY: all install smoke persistence clean
+.PHONY: all install smoke persistence performance clean

@@ -141,17 +141,17 @@ machine.
 
 ## Phase 9: Performance And Memory Pass
 
-- [ ] Test with 25 notes.
-- [ ] Test with 100 notes.
-- [ ] Test with maximum DOS-profile note count.
-- [ ] Test with a large note near `MAX_NOTE_BYTES`.
-- [ ] Measure startup time.
-- [ ] Measure note switching time.
-- [ ] Measure full-text search time.
-- [ ] Measure memory after indexing.
-- [ ] Measure memory while editing a large note.
+- [x] Test with 25 notes.
+- [x] Test with 100 notes.
+- [x] Test with maximum DOS-profile note count.
+- [x] Test with a large note near `MAX_NOTE_BYTES`.
+- [x] Measure startup time.
+- [x] Measure note switching time.
+- [x] Measure full-text search time.
+- [x] Measure memory after indexing.
+- [x] Measure memory while editing a large note.
 - [ ] Reduce limits further if the target machine is unstable.
-- [ ] Consider lazy indexing if startup or memory is too expensive.
+- [x] Consider lazy indexing if startup or memory is too expensive.
 
 ## Phase 10: Feature Triage If Needed
 

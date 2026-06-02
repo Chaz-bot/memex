@@ -4947,6 +4947,212 @@ static int run_persistence_tests(const char *dir)
     return 0;
 }
 
+static double elapsed_seconds(clock_t start, clock_t end)
+{
+    return (double)(end - start) / (double)CLOCKS_PER_SEC;
+}
+
+static long note_index_heap_bytes(void)
+{
+    long total = 0;
+    int i;
+
+    for (i = 0; i < note_count; i++) {
+        if (note_index[i].raw_text)
+            total += (long)strlen(note_index[i].raw_text) + 1;
+        if (note_index[i].plain_text)
+            total += (long)strlen(note_index[i].plain_text) + 1;
+    }
+    return total;
+}
+
+static long view_heap_bytes(void)
+{
+    long total = 0;
+    int i;
+
+    if (view_lines)
+        total += (long)MAX_LINES * (long)sizeof(view_lines[0]);
+    for (i = 0; i < view_line_count; i++) {
+        if (view_lines[i])
+            total += (long)strlen(view_lines[i]) + 1;
+    }
+    return total;
+}
+
+static int perf_write_generated_note(int index)
+{
+    char rel_path[MEMEX_PATH_MAX];
+    char text[MAX_LINE + 1];
+    char body[MAX_LINE + 1];
+    FILE *fp;
+    char path[MEMEX_PATH_MAX];
+    int line;
+
+    if (index % 10 == 0)
+        sprintf(rel_path, "Group%02d/Note%03d.md", index / 10, index);
+    else
+        sprintf(rel_path, "Note%03d.md", index);
+    if (!ensure_parent_dirs(rel_path))
+        return 0;
+    make_path(path, sizeof(path), rel_path);
+    fp = fopen(path, "w");
+    if (!fp)
+        return 0;
+    fprintf(fp, "---\ntitle: Note%03d\ntags: [perf, group%d]\n---\n", index, index % 7);
+    fprintf(fp, "# Note %03d\n\n", index);
+    fprintf(fp, "This is generated note %03d with perf-token-%03d.\n", index, index);
+    if (index > 0)
+        fprintf(fp, "Link to [[Note%03d]] and mention Note%03d.\n", index - 1, index / 2);
+    for (line = 0; line < 8; line++) {
+        sprintf(text, "Line %02d for note %03d", line, index);
+        sprintf(body, " includes searchable phase9 data and repeated markdown content.\n");
+        fputs(text, fp);
+        fputs(body, fp);
+    }
+    fclose(fp);
+    return 1;
+}
+
+static int perf_generate_notes(int count)
+{
+    int i;
+
+    if (!ensure_parent_dirs_for_path(note_dir) || !platform_mkdir(note_dir))
+        return smoke_fail("could not create performance note directory");
+    for (i = 0; i < count; i++) {
+        if (!perf_write_generated_note(i))
+            return smoke_fail("could not write generated performance note");
+    }
+    return 1;
+}
+
+static int perf_write_large_note(void)
+{
+    FILE *fp;
+    char path[MEMEX_PATH_MAX];
+    int i;
+
+    if (!ensure_parent_dirs_for_path(note_dir) || !platform_mkdir(note_dir))
+        return smoke_fail("could not create large-note directory");
+    if (!ensure_parent_dirs("Large.md"))
+        return smoke_fail("could not create large-note parent directory");
+    make_path(path, sizeof(path), "Large.md");
+    fp = fopen(path, "w");
+    if (!fp)
+        return smoke_fail("could not write large note");
+    fputs("# Large\n\n", fp);
+    for (i = 0; i < 190; i++)
+        fputs("Large note line with enough text to exercise editor load memory and wrapping behavior for phase nine performance measurements.\n", fp);
+    fclose(fp);
+    return 1;
+}
+
+static int perf_run_case(const char *label, int count)
+{
+    clock_t start;
+    clock_t after_load;
+    clock_t after_switch;
+    clock_t after_search;
+    int i;
+    int switch_count;
+
+    free_view();
+    free_note_indices();
+    note_count = 0;
+    dir_count = 0;
+    sidebar_item_count = 0;
+    current_note = -1;
+    recent_note_count = 0;
+    note_filter[0] = '\0';
+    active_tag[0] = '\0';
+    if (!perf_generate_notes(count))
+        return 0;
+
+    start = clock();
+    load_notes();
+    after_load = clock();
+    if (!smoke_expect(note_count >= count, "performance load missed generated notes"))
+        return 0;
+
+    switch_count = note_count < 20 ? note_count : 20;
+    for (i = 0; i < switch_count; i++)
+        load_note_view(i);
+    after_switch = clock();
+
+    run_full_text_search("phase9");
+    after_search = clock();
+
+    printf("performance: %s notes=%d dirs=%d load=%.3fs switch%d=%.3fs search=%.3fs index_heap=%ld view_heap=%ld results=%d\n",
+           label,
+           note_count,
+           dir_count,
+           elapsed_seconds(start, after_load),
+           switch_count,
+           elapsed_seconds(after_load, after_switch),
+           elapsed_seconds(after_switch, after_search),
+           note_index_heap_bytes(),
+           view_heap_bytes(),
+           search_result_count);
+    return 1;
+}
+
+static int run_performance_tests(const char *dir)
+{
+    char case_dir[MEMEX_PATH_MAX];
+    clock_t start;
+    clock_t end;
+    int large_idx;
+
+    copy_string(note_dir, sizeof(note_dir), dir);
+    strip_trailing_platform_seps(note_dir);
+    read_mode = 0;
+    reset_persistence_settings();
+
+    copy_string(case_dir, sizeof(case_dir), note_dir);
+    append_platform_path_part(case_dir, sizeof(case_dir), "case25");
+    copy_string(note_dir, sizeof(note_dir), case_dir);
+    if (!perf_run_case("case25", 25))
+        return 1;
+
+    copy_string(case_dir, sizeof(case_dir), dir);
+    append_platform_path_part(case_dir, sizeof(case_dir), "case100");
+    copy_string(note_dir, sizeof(note_dir), case_dir);
+    if (!perf_run_case("case100", 100))
+        return 1;
+
+    copy_string(case_dir, sizeof(case_dir), dir);
+    append_platform_path_part(case_dir, sizeof(case_dir), "case_max");
+    copy_string(note_dir, sizeof(note_dir), case_dir);
+    if (!perf_run_case("case_max", MAX_NOTES))
+        return 1;
+
+    copy_string(case_dir, sizeof(case_dir), dir);
+    append_platform_path_part(case_dir, sizeof(case_dir), "large");
+    copy_string(note_dir, sizeof(note_dir), case_dir);
+    if (!perf_write_large_note())
+        return 1;
+    load_notes();
+    large_idx = find_note_by_target("Large");
+    if (!smoke_expect(large_idx >= 0, "large note was not loaded"))
+        return 1;
+    start = clock();
+    current_note = large_idx;
+    load_editor();
+    end = clock();
+    printf("performance: large_note lines=%d editor_load=%.3fs static_edit_buffer=%ld view_heap=%ld max_note_bytes=%ld\n",
+           edit_line_count,
+           elapsed_seconds(start, end),
+           (long)sizeof(edit_lines),
+           view_heap_bytes(),
+           (long)MAX_NOTE_BYTES);
+
+    free_view();
+    free_note_indices();
+    printf("performance: PASS\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int ch;
@@ -4979,6 +5185,19 @@ int main(int argc, char **argv)
             return 2;
         }
         rc = run_persistence_tests(argv[2]);
+        platform_shutdown();
+        return rc;
+    }
+
+    if (argc > 1 && strcmp(argv[1], "--performance-test") == 0) {
+        int rc;
+
+        if (argc < 3) {
+            fprintf(stderr, "usage: memex --performance-test DIR\n");
+            platform_shutdown();
+            return 2;
+        }
+        rc = run_performance_tests(argv[2]);
         platform_shutdown();
         return rc;
     }

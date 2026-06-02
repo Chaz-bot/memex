@@ -124,3 +124,39 @@ The persistence test writes and reloads `.memex-state`, `.memexrc`, saved
 searches, template files, and the daily-note format file. It verifies sidebar
 visibility, read/write mode, theme/config/key overrides, saved-search
 persistence, template expansion, and daily note naming.
+
+Phase 9 adds a noninteractive performance/memory pass:
+
+```sh
+./memex --performance-test /tmp/memex-performance
+```
+
+On the Linux host this is also available through:
+
+```sh
+make performance
+```
+
+The performance test generates 25-note, 100-note, and `MAX_NOTES` data sets,
+then reports load/index time, repeated note-switch time, full-text search time,
+indexed heap bytes, loaded-view heap bytes, and result counts. It also creates a
+large note near `MAX_NOTE_BYTES` and reports editor-load time, the static editor
+buffer size, and loaded-view heap use. On the host DOS-profile build, the max
+case uses the DOS `MAX_NOTES` value.
+
+Lazy indexing was considered after the host DOS-profile run. The current
+measurements do not justify adding that complexity before testing on real
+DJGPP/PDCurses hardware or emulation, so no lazy-indexing change has been made
+yet.
+
+Most recent host DOS-profile measurements:
+
+```text
+case25:  notes=25  load=0.002s switch20=0.000s search=0.000s index_heap=40722
+case100: notes=100 load=0.022s switch20=0.000s search=0.000s index_heap=163122
+case_max: notes=128 load=0.036s switch20=0.001s search=0.000s index_heap=208818
+large_note: lines=192 editor_load=0.000s static_edit_buffer=246784 view_heap=9009
+```
+
+These are Linux-host measurements with `-DMEMEX_DOS_PROFILE`, not real DOS
+runtime measurements.
