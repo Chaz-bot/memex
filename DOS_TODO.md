@@ -178,7 +178,7 @@ machine.
 
 ## Phase 12: Release Criteria
 
-- [ ] Linux build still passes a basic smoke test.
+- [x] Linux build still passes a basic smoke test.
 - [ ] DOS build produces an executable.
 - [ ] DOS executable runs on the intended machine or emulator.
 - [ ] Keyboard navigation works.
@@ -187,5 +187,5 @@ machine.
 - [ ] State and config persistence work.
 - [ ] Performance is acceptable on the target hardware.
 - [ ] Memory use is stable after repeated open/edit/search cycles.
-- [ ] `DOS_PORT.md` matches the implemented design.
-- [ ] `DOS_TODO.md` reflects remaining known work.
+- [x] `DOS_PORT.md` matches the implemented design.
+- [x] `DOS_TODO.md` reflects remaining known work.

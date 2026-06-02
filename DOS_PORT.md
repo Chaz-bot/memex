@@ -1,132 +1,37 @@
-# Porting `memex` to DOS
+# `memex` DOS Port Design
 
-This document describes what it would take to port the current Linux-targeted `memex` codebase to DOS on a Pocket 386 class machine with a 386SX CPU and 8 MB of RAM.
+This document describes the design of the DOS port as it was implemented on
+the `dos-port` branch. The target is a 32-bit protected-mode DOS executable
+using DJGPP and PDCurses, running on a 386SX/8 MB class machine.
 
-Short answer: a DOS build is possible in principle, but not from the current source tree without a real compatibility layer and a memory-reduction pass.
+## Goals
 
-## Current State
+- Keep the Linux build working throughout the port.
+- Avoid scattering `#ifdef` guards across `memex.c`.
+- Express DOS-specific behavior through a small platform layer and a separate
+  build target.
+- Require long filename support for the first working port.
+- Target 32-bit protected-mode DOS; defer 16-bit real-mode.
 
-The code is currently written for old Linux, not DOS.
+## Source Files
 
-Relevant source assumptions:
+| File | Role |
+|------|------|
+| `memex.c` | Application code, unchanged for DOS compatibility |
+| `memex_config.h` | Compile-time limits; selects DOS or Linux profile |
+| `platform.h` | Platform API declaration |
+| `platform_posix.c` | POSIX implementation (Linux build) |
+| `platform_dos.c` | DOS implementation (DJGPP build) |
+| `ui_curses.h` | Curses compatibility and key normalization |
+| `Makefile` | Linux build |
+| `Makefile.dj` | DJGPP/DOS build |
+| `build-dos.bat` | DOS batch build entry point |
 
-- `ncurses` UI in [Makefile](./Makefile) and [memex.c](./memex.c)
-- POSIX headers in [memex.c](./memex.c): `dirent.h`, `unistd.h`, `signal.h`, `sys/stat.h`
-- POSIX-style filesystem and process behavior throughout [memex.c](./memex.c)
-- Large static arrays sized for convenience, not for a tight DOS memory model
+## Platform Layer
 
-## Main Blockers
-
-### 1. Terminal UI library
-
-The program uses `curses.h` and common curses behaviors such as:
-
-- `initscr`
-- `cbreak`
-- `noecho`
-- `keypad`
-- `getch`
-- `start_color`
-- `init_pair`
-- `A_REVERSE`
-- `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_NPAGE`, `KEY_PPAGE`, `KEY_ENTER`
-- `KEY_MOUSE`, `mousemask`, and `getmouse` when mouse support is available
-
-That is workable on DOS only if you replace `ncurses` with a DOS-compatible curses implementation, most likely `PDCurses`.
-PDCurses can translate the DOS console's serial or PS/2 mouse driver events into
-the curses mouse API used by `memex`; without that support, the program falls
-back to keyboard-only input.
-
-### 2. POSIX directory traversal
-
-The note scanner depends on:
-
-- `opendir`
-- `readdir`
-- `closedir`
-- `struct dirent`
-
-Those are Linux/POSIX interfaces. DOS toolchains may provide substitutes, but you should assume you need a wrapper layer.
-
-Primary scan sites in [memex.c](./memex.c):
-
-- note loading logic around `opendir` / `readdir`
-- rename/link rewrite directory walks
-
-### 3. POSIX filesystem behavior
-
-The code expects POSIX-like behavior for:
-
-- `mkdir(path, 0777)`
-- `stat`
-- `rename`
-- `getcwd`
-- `/` path separators
-- dot-prefixed directories and files like `.trash`, `.templates`, `.memexrc`
-
-DOS can handle some of this under DJGPP, but not all semantics are safe to assume.
-
-### 4. Memory footprint
-
-The source keeps a lot of data in global fixed-size arrays. That is convenient on Linux, but on DOS with 8 MB RAM it is the main runtime risk.
-
-Important compile-time limits near the top of [memex.c](./memex.c):
-
-- `MAX_NOTES 512`
-- `MAX_LINES 2048`
-- `MAX_RENDERED 8192`
-- `MAX_RESULTS 256`
-- `MAX_BACKLINKS 256`
-- `MAX_MENTIONS 256`
-- `MAX_SIDEBAR_ITEMS 1024`
-- `PATH_MAX 1024`
-
-The largest pressure points are:
-
-- `static Note notes[MAX_NOTES]`
-- `static DisplayLine rendered_lines[MAX_RENDERED]`
-- `static NoteIndex note_index[MAX_NOTES]`
-- `static DirectoryInfo dirs[MAX_DIRS]`
-- `static SidebarItem sidebar_items[MAX_SIDEBAR_ITEMS]`
-- `static char edit_lines[MAX_LINES][MAX_LINE + 1]`
-
-The 386SX CPU is not the real problem here. The memory budget is.
-
-## Recommended Target
-
-If you want real DOS support, target this combination first:
-
-- Compiler: `DJGPP`
-- TUI library: `PDCurses`
-- Memory model: 32-bit protected mode DOS extender environment
-
-Do not target 16-bit Turbo C or Open Watcom first. The program is already large enough that a 16-bit first port would force extra memory-model work too early.
-
-## Porting Strategy
-
-Do this in phases. Do not start by editing random call sites.
-
-### Phase 1: Introduce a platform layer
-
-Create a small compatibility boundary instead of scattering `#ifdef DOS` across the whole file.
-
-Add a new abstraction header and implementation pair, for example:
-
-- `platform.h`
-- `platform_posix.c`
-- `platform_dos.c`
-
-Move these responsibilities behind wrappers:
-
-- directory iteration
-- path joining and separator normalization
-- `mkdir`
-- `rename`
-- `stat`-based existence checks
-- current directory lookup
-- interrupt handling
-
-Suggested wrapper surface:
+`platform.h` declares a small filesystem and directory API. `memex.c` calls
+only these wrappers; it has no direct `opendir`, `readdir`, `getcwd`, `mkdir`,
+`stat`, or `rename` calls.
 
 ```c
 int platform_init(void);
@@ -135,203 +40,182 @@ int platform_getcwd(char *buf, size_t size);
 int platform_mkdir(const char *path);
 int platform_file_exists(const char *path);
 int platform_is_dir(const char *path);
+int platform_stat(const char *path, PlatformStat *st);
 int platform_rename(const char *old_path, const char *new_path);
 char platform_path_sep(void);
-```
-
-For directory scanning, define a tiny iterator API instead of exposing `DIR *`:
-
-```c
-typedef struct PlatformDir PlatformDir;
 
 PlatformDir *platform_opendir(const char *path);
 int platform_readdir(PlatformDir *dir, char *name, size_t size);
 void platform_closedir(PlatformDir *dir);
 ```
 
-### Phase 2: Isolate curses usage
+`PlatformStat` carries `exists`, `is_dir`, `mtime`, and `ctime` as plain
+`long` fields, avoiding `struct stat` from the POSIX headers.
 
-The UI calls are all in one file today, but they are still direct `curses` calls. Keep the rendering model, but make the curses dependency swappable.
+`platform_posix.c` implements these with standard POSIX calls. It is linked
+into the Linux build via `Makefile`.
 
-At minimum:
+`platform_dos.c` provides the same surface for DJGPP. It uses `<dirent.h>`,
+`<sys/stat.h>`, and `<unistd.h>` as supplied by DJGPP, which covers the same
+call sites as the POSIX implementation.
 
-- keep `curses.h` includes behind a single compatibility include
-- centralize color initialization
-- centralize key normalization
+Paths inside `memex.c` use `/` as the internal separator. The platform layer
+accepts both `/` and `\`; `platform_path_sep()` returns `'\\'` on both
+implementations to match the DOS convention when building filesystem paths.
 
-You want one translation unit deciding whether `KEY_BACKSPACE`, `KEY_BTAB`, `KEY_ENTER`, and color support behave the same on Linux and DOS.
+## Memory Profile
 
-### Phase 3: Reduce static memory
+`memex_config.h` defines two compile-time profiles selected by
+`-DMEMEX_DOS_PROFILE`.
 
-Before attempting a DOS build, cut the compile-time limits aggressively.
+### DOS profile limits
 
-Suggested first DOS profile:
+| Constant | Linux | DOS |
+|----------|-------|-----|
+| `MEMEX_PATH_MAX` | 1024 | 260 |
+| `MAX_NOTES` | 512 | 128 |
+| `MAX_LINES` | 2048 | 1024 |
+| `MAX_RENDERED` | 8192 | 2048 |
+| `MAX_RESULTS` | 256 | 96 |
+| `MAX_BACKLINKS` | 256 | 96 |
+| `MAX_MENTIONS` | 256 | 96 |
+| `MAX_DIRS` | 256 | 96 |
+| `MAX_SIDEBAR_ITEMS` | 1024 | 256 |
+| `MAX_HISTORY` | 128 | 32 |
+| `MAX_SAVED_SEARCHES` | 32 | 16 |
 
-- `MAX_NOTES`: `512 -> 128`
-- `MAX_RENDERED`: `8192 -> 2048`
-- `MAX_RESULTS`: `256 -> 96`
-- `MAX_BACKLINKS`: `256 -> 96`
-- `MAX_MENTIONS`: `256 -> 96`
-- `MAX_DIRS`: `256 -> 96`
-- `MAX_SIDEBAR_ITEMS`: `1024 -> 256`
-- `MAX_LINES`: `2048 -> 1024`
-- `MAX_HISTORY`: `128 -> 32`
-- `MAX_SAVED_SEARCHES`: `32 -> 16`
-- `PATH_MAX`: `1024 -> 260`
+The Linux normal profile BSS is approximately 13.4 MB. The DOS profile BSS
+is approximately 1.67 MB. With DPMI overhead, stack, and heap a machine with
+4 MB of extended memory is the practical minimum; the design target is 8 MB.
 
-That should be controlled by a build profile, not hand-edited constants.
+### Optional feature switches
 
-Suggested pattern near the top of [memex.c](./memex.c):
+Features can be disabled individually at compile time if the target machine
+is memory-constrained or PDCurses compatibility is incomplete:
 
-```c
-#ifdef MEMEX_DOS_PROFILE
-#define PATH_MAX 260
-#define MAX_NOTES 128
-#define MAX_LINES 1024
-#define MAX_RENDERED 2048
-...
-#else
-#define PATH_MAX 1024
-#define MAX_NOTES 512
-#define MAX_LINES 2048
-#define MAX_RENDERED 8192
-...
-#endif
-```
+| Define | Effect |
+|--------|--------|
+| `-DMEMEX_DISABLE_SAVED_SEARCHES` | Removes saved search persistence |
+| `-DMEMEX_DISABLE_MENTIONS` | Removes unlinked mention indexing |
+| `-DMEMEX_DISABLE_TRANSCLUSION` | Removes `![[Note]]` transclusion |
+| `-DMEMEX_DISABLE_MOUSE` | Forces keyboard-only input |
 
-Better still, move the limits into a dedicated config header.
+All features are enabled by default including in `MEMEX_DOS_PROFILE`. The
+host DOS-profile measurements do not justify trimming features before real
+DOS runtime testing.
 
-### Phase 4: Fix path and filename assumptions
+## Curses Compatibility
 
-DOS-specific risks:
+`ui_curses.h` is the only direct curses include in the codebase. It handles:
 
-- backslash vs slash
-- possible 8.3 filename environments
-- reserved device names
-- hidden-file conventions are not Unix-like
+- Including `<curses.h>` (resolves to PDCurses on DJGPP, ncurses on Linux).
+- Detecting mouse support via `KEY_MOUSE` and `MEMEX_DISABLE_MOUSE`.
+- Detecting `KEY_BTAB` availability.
+- Normalizing raw key values to a stable `MEMEX_KEY_*` enum so the
+  application layer does not branch on curses-version differences.
+- Centralizing color pair initialization in `ui_start_theme_color`.
+- Providing `ui_init_keyboard`, `ui_read_key`, and per-key predicate helpers.
 
-The current code assumes modern directory and filename behavior for:
+Keys normalized: Enter, Backspace (three variants), Tab, Shift-Tab, Escape,
+arrow keys, Page Up/Down, Home, End, and mouse events.
 
-- note files
-- `.trash`
-- `.templates`
-- `.memexrc`
+## Path And Filename Decisions
+
+Paths are normalized to use `/` internally. The platform layer accepts both
+separators when building filesystem paths for DOS.
+
+Dot-prefixed support files are kept as-is since the port requires long
+filename support:
+
 - `.memex-state`
+- `.memexrc`
 - `.memex-searches`
 - `.memex-daily-format`
+- `.trash/`
+- `.templates/`
 
-Decide early whether the DOS target requires long filenames.
+Note title validation in `memex.c` rejects DOS reserved device names
+(`CON`, `AUX`, `COM1`–`COM9`, `LPT1`–`LPT9`, `NUL`, `PRN`) and strips
+trailing dots and spaces to prevent filesystem errors on DOS.
 
-Recommended decision:
+## Build System
 
-- require long filename support
-- keep markdown files as `.md`
-- keep subdirectories enabled
+### Linux
 
-If long filenames are not guaranteed on the target DOS setup, this project becomes materially less practical.
+```sh
+make
+make smoke
+make persistence
+make performance
+make triage
+```
 
-### Phase 5: Build-system split
+`triage` builds with all four feature-disable switches and runs the core and
+persistence smoke tests to confirm the reduced build still works.
 
-The current [Makefile](./Makefile) assumes `gcc` and `-lncurses`.
+### DOS / DJGPP
 
-Add a separate DOS-oriented build file rather than overloading the Linux one immediately.
+```bat
+make -f Makefile.dj
+make -f Makefile.dj check-syntax
+make -f Makefile.dj check-triage
+```
 
-Example direction:
+`check-syntax` compiles without linking — useful on hosts that do not have
+PDCurses installed. `check-triage` compiles the reduced-feature build.
 
-- `Makefile` for Linux
-- `Makefile.dj` or `build-dos.bat` for DJGPP
+For a Linux-hosted DJGPP cross-compiler:
 
-The DOS build needs to:
+```sh
+make -f Makefile.dj CC=i586-pc-msdosdjgpp-gcc
+```
 
-- set a DOS profile define such as `-DMEMEX_DOS_PROFILE`
-- link against `PDCurses`
-- use the DOS platform implementation instead of the POSIX one
+## Smoke Tests
 
-### Phase 6: Trim features only if necessary
+Three noninteractive test modes are built into `memex.c` and available from
+the Linux host:
 
-If the first DOS build still feels memory-tight or too slow, cut features in this order:
+| Mode | Flag | Make target |
+|------|------|-------------|
+| Core runtime | `--smoke-test <dir>` | `make smoke` |
+| Persistence / config | `--persistence-test <dir>` | `make persistence` |
+| Performance / memory | `--performance-test <dir>` | `make performance` |
 
-1. saved searches
-2. unlinked mentions
-3. backlinks index breadth
-4. full-text search result count
-5. rendered line cache size
-6. folder sidebar depth/detail
+All three pass on the Linux host with and without `-DMEMEX_DOS_PROFILE`. They
+do not initialize curses and can run inside a DOS environment once `memex.exe`
+links.
 
-Do not remove the basic note browser/editor first. Preserve the core loop.
+### Host DOS-profile performance measurements
 
-## Specific Code Areas To Change
+```
+case25:    notes=25   load=0.002 s   index_heap=40 KB
+case100:   notes=100  load=0.022 s   index_heap=159 KB
+case_max:  notes=128  load=0.036 s   index_heap=204 KB
+large_note: lines=192  editor_load=0.000 s  static_edit_buffer=241 KB
+```
 
-These are the highest-value places to touch first in [memex.c](./memex.c):
+These are Linux-host numbers with `-DMEMEX_DOS_PROFILE`, not real DOS runtime
+measurements.
 
-- includes at the top of the file
-- path handling helpers
-- recursive note loading
-- note directory creation
-- trash and rename operations
-- startup `getcwd` path initialization
-- signal handling setup
-- curses init and key handling
+## Current Status
 
-Concrete hotspots include the call sites around:
+Phases 1–11 are complete on the Linux host. The source passes:
 
-- `opendir` / `readdir`
-- `mkdir`
-- `rename`
-- `stat`
-- `getcwd`
-- `signal(SIGINT, on_signal)`
-- `initscr`, `start_color`, `keypad`, `getch`
+- `make` (Linux build, normal profile)
+- `make smoke` / `make persistence` / `make performance` (Linux host)
+- `make triage` (all feature-disable switches)
+- `make -f Makefile.dj check-syntax` (DJGPP-style syntax check, no PDCurses)
+- `make -f Makefile.dj check-triage` (triage syntax check)
 
-## Suggested Implementation Order
+A full DOS binary linked against PDCurses has not yet been produced. The
+following remain pending until real DOS hardware or emulator testing:
 
-1. Add a platform abstraction without changing behavior.
-2. Move all filesystem and directory traversal through the abstraction.
-3. Add a DOS memory profile with lower limits.
-4. Add a curses compatibility include and key normalization layer.
-5. Create a DJGPP + PDCurses build target.
-6. Build on Linux again to confirm the refactor did not break the current target.
-7. Attempt the first DOS build.
-8. Fix compile errors and missing API assumptions.
-9. Test with a very small note vault.
-10. Measure memory pressure and reduce limits further if needed.
-
-## Practical Risks
-
-### High risk
-
-- static memory still too large for comfortable 8 MB operation
-- DOS filesystem edge cases around long filenames and nested paths
-- curses key behavior differences under PDCurses
-
-### Medium risk
-
-- rename/trash semantics differing from Linux
-- color support inconsistencies
-- performance of full-text indexing on slower storage
-
-### Lower risk
-
-- CPU speed for normal note browsing and editing
-
-The 386SX will be slow, but this code is simple enough that careful feature limits matter more than raw CPU.
-
-## What I Would Do First
-
-If continuing this port, the first concrete implementation step should be:
-
-1. split platform-sensitive code out of [memex.c](./memex.c)
-2. add a DOS memory profile header
-3. keep Linux behavior unchanged while refactoring
-
-That gives you a clean base for an actual DOS build instead of a growing pile of conditional compilation inside one large source file.
-
-## Likely Outcome
-
-Expected outcomes by environment:
-
-- Old Linux on Pocket 386: realistic target for the current codebase
-- DOS with DJGPP and PDCurses: possible with moderate refactoring and memory reduction
-- Plain 16-bit DOS compiler target: not recommended for the first port
-
-If you want the DOS version to be pleasant rather than merely booting, plan on reducing default limits and possibly making a few advanced features optional at compile time.
+- Link `memex.exe` against PDCurses in a DJGPP environment.
+- Confirm the executable starts and exits cleanly under FreeDOS/DOSBox-X.
+- Confirm arrow, page, home, and end keys under PDCurses.
+- Confirm create, edit, save, rename, trash, and reopen notes.
+- Confirm links, backlinks, tags, outline, and search at DOS-profile limits.
+- Confirm state and config persistence.
+- Confirm acceptable performance on the target hardware.
+- Confirm stable memory use across repeated open/edit/search cycles.
+- Record tested compiler, PDCurses, DPMI provider, and runtime versions.
