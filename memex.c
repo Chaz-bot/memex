@@ -1369,6 +1369,10 @@ static void scan_notes_recursive(const char *rel_dir)
     char path[MEMEX_PATH_MAX];
     PlatformDir *dir;
     char ent_name[MEMEX_PATH_MAX];
+    /* Collect all entries first to avoid nested opendir clobbering readdir */
+    char entries[MAX_NOTES + MAX_DIRS][MEMEX_PATH_MAX];
+    int entry_count = 0;
+    int i;
 
     if (rel_dir[0]) {
         make_path(path, sizeof(path), rel_dir);
@@ -1378,11 +1382,18 @@ static void scan_notes_recursive(const char *rel_dir)
     dir = platform_opendir(path);
     if (!dir)
         return;
-    while (platform_readdir(dir, ent_name, sizeof(ent_name)) && note_count < MAX_NOTES) {
+    while (platform_readdir(dir, ent_name, sizeof(ent_name))) {
+        if (entry_count < MAX_NOTES + MAX_DIRS)
+            copy_string(entries[entry_count++], sizeof(entries[0]), ent_name);
+    }
+    platform_closedir(dir);
+
+    for (i = 0; i < entry_count && note_count < MAX_NOTES; i++) {
         char child_rel[MEMEX_PATH_MAX];
         char child_path[MEMEX_PATH_MAX];
         PlatformStat st;
 
+        copy_string(ent_name, sizeof(ent_name), entries[i]);
         if (strcmp(ent_name, ".") == 0 || strcmp(ent_name, "..") == 0)
             continue;
         if (strcmp(ent_name, trash_dir_name) == 0
@@ -1406,7 +1417,6 @@ static void scan_notes_recursive(const char *rel_dir)
             load_note_entry(child_rel);
         }
     }
-    platform_closedir(dir);
 }
 
 static int note_matches_current_filters(int note_idx)
