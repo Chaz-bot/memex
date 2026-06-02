@@ -330,7 +330,10 @@ static int is_word_boundary_char(int ch)
 static int has_md_suffix(const char *name)
 {
     size_t n = strlen(name);
-    return n > 3 && strcmp(name + n - 3, ".md") == 0;
+    if (n <= 3) return 0;
+    return name[n-3] == '.' &&
+           (name[n-2] == 'm' || name[n-2] == 'M') &&
+           (name[n-1] == 'd' || name[n-1] == 'D');
 }
 
 static int case_contains(const char *s, const char *needle)
@@ -865,6 +868,14 @@ static void parse_frontmatter(FILE *fp, Note *note)
     }
     buf[strcspn(buf, "\r\n")] = '\0';
     if (strcmp(buf, "---") != 0) {
+        /* No YAML frontmatter. Use a leading # heading as display_title. */
+        if (buf[0] == '#') {
+            const char *p = buf + 1;
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (*p)
+                copy_string(note->display_title, sizeof(note->display_title), p);
+        }
         fseek(fp, pos, SEEK_SET);
         return;
     }

@@ -98,14 +98,14 @@ machine.
 
 ## Phase 6: First DOS Compile
 
-- [ ] Build with DJGPP and PDCurses.
+- [x] Build with DJGPP and PDCurses.
 - [x] Fix compiler errors without changing user-facing behavior.
 - [x] Fix missing headers and incompatible declarations.
-- [ ] Fix C library differences found by DJGPP.
-- [ ] Confirm the executable starts and exits cleanly.
-- [ ] Confirm startup creates or opens the note directory.
-- [ ] Confirm no large unexpected allocations fail at startup.
-- [ ] Record executable size and available memory.
+- [x] Fix C library differences found by DJGPP.
+- [x] Confirm the executable starts and exits cleanly.
+- [x] Confirm startup creates or opens the note directory.
+- [x] Confirm no large unexpected allocations fail at startup.
+- [x] Record executable size and available memory.
 
 ## Phase 7: Core Runtime Smoke Tests
 
@@ -179,12 +179,12 @@ machine.
 ## Phase 12: Release Criteria
 
 - [x] Linux build still passes a basic smoke test.
-- [ ] DOS build produces an executable.
-- [ ] DOS executable runs on the intended machine or emulator.
+- [x] DOS build produces an executable.
+- [x] DOS executable runs on the intended machine or emulator.
 - [ ] Keyboard navigation works.
-- [ ] Create, edit, save, rename, trash, and reopen notes work.
-- [ ] Links, backlinks, tags, outline, and search work at DOS-profile limits.
-- [ ] State and config persistence work.
+- [x] Create, edit, save, rename, trash, and reopen notes work.
+- [x] Links, backlinks, tags, outline, and search work at DOS-profile limits.
+- [x] State and config persistence work.
 - [ ] Performance is acceptable on the target hardware.
 - [ ] Memory use is stable after repeated open/edit/search cycles.
 - [x] `DOS_PORT.md` matches the implemented design.

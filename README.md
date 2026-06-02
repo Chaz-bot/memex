@@ -66,7 +66,8 @@ See [DOS_BUILD.md](./DOS_BUILD.md) for phase-by-phase build notes and
 
 - **Compiler**: DJGPP GCC 2.95 or later (32-bit protected-mode DOS toolchain).
   For Linux-hosted cross-compilation, a DJGPP cross-compiler such as
-  `i586-pc-msdosdjgpp-gcc` works.
+  `i686-pc-msdosdjgpp-gcc` works (the AUR `djgpp-gcc` package installs
+  under this name).
 - **Curses library**: PDCurses built for the same DJGPP target, with headers
   and `libpdcurses.a` available in the compiler's search paths.
 - **DPMI provider**: required at runtime for 32-bit protected-mode execution.
@@ -96,7 +97,7 @@ build-dos.bat
 For a Linux-hosted DJGPP cross-compiler, pass the compiler explicitly:
 
 ```sh
-make -f Makefile.dj CC=i586-pc-msdosdjgpp-gcc
+make -f Makefile.dj CC=i686-pc-msdosdjgpp-gcc
 ```
 
 To verify the source compiles without linking (useful on hosts without PDCurses
@@ -220,7 +221,7 @@ the X11 or SDL variant.
 
 **Long filename errors on file create** — The long filename TSR is not active.
 Under FreeDOS, load `DOSLFN.COM` or `JLFN.COM` before running `memex.exe`.
-Under DOSBox-X, enable `long file names=true` in the configuration.
+Under DOSBox-X, set `lfn=true` in the `[dos]` section of the configuration.
 
 **Memory allocation failures on startup** — The DOS profile limits are
 aggressive enough for 8 MB but may need further reduction on a 4 MB machine.

@@ -79,15 +79,43 @@ make -f Makefile.dj check-syntax
 
 That target compiles `memex.c` and `platform_dos.c` with `MEMEX_DOS_PROFILE`
 without linking PDCurses, which is useful on hosts that do not have the DOS
-library installed. A full `make -f Makefile.dj` currently requires a real DJGPP
-environment with PDCurses available. In this workspace, the full DOS build gets
-through compilation and stops at link because `-lpdcurses` is missing.
+library installed.
 
-For a Linux-hosted DJGPP cross compiler, pass the compiler explicitly, for
-example:
+A confirmed full build was produced using the following environment:
+
+- **Compiler**: `i686-pc-msdosdjgpp-gcc` (GCC 14.2.0, AUR `djgpp-gcc 14.2.0-1`)
+- **C runtime**: `djgpp-djcrx-bootstrap 2.05-5` (bootstrap package; the full
+  `djgpp-djcrx` does not build with GCC 14 due to a `sortsyms` declaration
+  conflict in the djasm assembler source)
+- **PDCurses**: PDCursesMod DOS backend (Bill-Gray/PDCursesMod, `dos/` subdirectory)
+- **Build command**:
 
 ```sh
-make -f Makefile.dj CC=i586-pc-msdosdjgpp-gcc
+make -f Makefile.dj \
+  CC=i686-pc-msdosdjgpp-gcc \
+  LIBS="/path/to/PDCursesMod/dos/pdcurses.a" \
+  CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DISABLE_MOUSE -I/path/to/PDCursesMod"
+```
+
+Key build findings:
+
+- `-march=i386` is required for both `memex.exe` and PDCurses. The default
+  `i686-pc-msdosdjgpp-gcc` target emits i686 instructions (`cmov` etc.) that
+  cause `SIGILL` on any CPU emulated below Pentium Pro level.
+- `-DMEMEX_DISABLE_MOUSE` is required. PDCursesMod's `getmouse()` takes no
+  arguments and returns `mmask_t`, which is incompatible with the ncurses
+  `getmouse(MEVENT *)` API used in `memex.c`.
+- PDCursesMod builds `pdcurses.a` without the `lib` prefix, so `-lpdcurses`
+  does not resolve; pass the full path to `pdcurses.a` instead.
+- The AUR `djgpp-gcc` package installs as `i686-pc-msdosdjgpp-gcc`, not
+  `i586-pc-msdosdjgpp-gcc`.
+
+Produced executable: `memex.exe`, 340 KB, DJGPP go32 v2.05 stub.
+
+For a Linux-hosted DJGPP cross compiler:
+
+```sh
+make -f Makefile.dj CC=i686-pc-msdosdjgpp-gcc ...
 ```
 
 Phase 7 adds a noninteractive core runtime smoke test:
@@ -188,3 +216,50 @@ make -f Makefile.dj check-triage
 
 The existing DOS-profile limits for backlinks, mentions, rendered lines,
 results, and sidebar items were reviewed after Phase 9 and left unchanged.
+
+Phase 12 confirms the following in DOSBox-X (dosbox-x-sdl2 2026.05.02,
+machine=svga_s3, memsize=16, lfn=true, cycles=max):
+
+- `memex.exe --smoke-test c:\smoke` passes.
+- `memex.exe --persistence-test c:\persist` passes.
+- `memex.exe c:\smoke` launches the interactive TUI without error.
+
+Two source fixes were required for correct DOS runtime behavior:
+
+1. `has_md_suffix` was case-sensitive and did not recognise `.MD` filenames
+   returned by the FAT directory scanner when LFN is not active. Fixed to
+   check each character case-independently.
+2. When a note file has no YAML frontmatter, the title was derived solely from
+   the filename. On a FAT filesystem without LFN, `Alpha.md` is stored and
+   returned as `ALPHA.MD`, making the derived title `ALPHA` rather than
+   `Alpha`. Fixed `parse_frontmatter` to read a leading `# Heading` line as
+   `display_title` when no YAML block is present. `find_note_by_target` checks
+   `display_title`, so the heading-derived title is used for link resolution
+   and smoke test verification regardless of filename case.
+
+DOSBox-X configuration used for testing (`dosbox-x.conf`):
+
+```ini
+[sdl]
+windowresolution=1024x768
+output=opengl
+
+[dosbox]
+machine=svga_s3
+memsize=16
+
+[dos]
+lfn=true
+
+[cpu]
+cputype=pentium
+cycles=max
+
+[autoexec]
+mount c /path/to/dos-test
+c:
+```
+
+Note: DOSBox-X has built-in DPMI support; `CWSDPMI.EXE` is not required when
+running under DOSBox-X. The `lfn=true` option (not `long file names=true`) is
+the correct key for the `[dos]` section.
