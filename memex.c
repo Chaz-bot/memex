@@ -309,11 +309,6 @@ static int theme_index_from_name(const char *name)
     return 0;
 }
 
-static int is_word_boundary_char(int ch)
-{
-    return ch == '\0' || isspace((unsigned char)ch) || ispunct((unsigned char)ch);
-}
-
 static int case_equals(const char *a, const char *b)
 {
     while (*a && *b) {
@@ -324,6 +319,13 @@ static int case_equals(const char *a, const char *b)
     }
     return *a == '\0' && *b == '\0';
 }
+
+#if MEMEX_ENABLE_MENTIONS
+static int is_word_boundary_char(int ch)
+{
+    return ch == '\0' || isspace((unsigned char)ch) || ispunct((unsigned char)ch);
+}
+#endif
 
 static int has_md_suffix(const char *name)
 {
@@ -364,6 +366,7 @@ static int case_starts_with(const char *s, const char *prefix)
     return 1;
 }
 
+#if MEMEX_ENABLE_MENTIONS
 static int text_contains_phrase(const char *s, const char *needle)
 {
     int i, j;
@@ -385,6 +388,7 @@ static int text_contains_phrase(const char *s, const char *needle)
     }
     return 0;
 }
+#endif
 
 static int note_matches_active_tag(int note_idx)
 {
@@ -1638,6 +1642,9 @@ static void load_saved_searches(void)
     char buf[MAX_LINE + 2];
 
     saved_search_count = 0;
+#if !MEMEX_ENABLE_SAVED_SEARCHES
+    return;
+#endif
     make_special_path(path, sizeof(path), SAVED_SEARCH_FILE);
     fp = fopen(path, "r");
     if (!fp)
@@ -1665,6 +1672,7 @@ static void load_saved_searches(void)
 
 static void save_saved_searches(void)
 {
+#if MEMEX_ENABLE_SAVED_SEARCHES
     char path[MEMEX_PATH_MAX];
     FILE *fp;
     int i;
@@ -1676,6 +1684,7 @@ static void save_saved_searches(void)
     for (i = 0; i < saved_search_count; i++)
         fprintf(fp, "%s|%s\n", saved_searches[i].name, saved_searches[i].query);
     fclose(fp);
+#endif
 }
 
 static void note_index_add_unique(int *items, int *count, int max_count, int value)
@@ -1757,6 +1766,7 @@ static void build_note_indices(void)
         }
     }
 
+#if MEMEX_ENABLE_MENTIONS
     for (i = 0; i < note_count; i++) {
         for (j = 0; j < note_count; j++) {
             int linked = 0;
@@ -1779,6 +1789,7 @@ static void build_note_indices(void)
                                       MAX_MENTIONS, j);
         }
     }
+#endif
 }
 
 static void save_state(void)
@@ -1929,6 +1940,7 @@ static void add_wrapped_prefixed_line(const char *prefix, const char *text,
     }
 }
 
+#if MEMEX_ENABLE_TRANSCLUSION
 static int parse_embed_target(const char *line, char *target, size_t target_size)
 {
     const char *p = line;
@@ -1955,6 +1967,7 @@ static int parse_embed_target(const char *line, char *target, size_t target_size
                     label, sizeof(label));
     return target[0] != '\0';
 }
+#endif
 
 static int is_table_divider(const char *line)
 {
@@ -1994,6 +2007,7 @@ static void render_table_line(const char *line, int source_line, int link_index,
     add_wrapped_prefixed_line("| ", formatted, 2, A_BOLD, source_line, link_index, width);
 }
 
+#if MEMEX_ENABLE_TRANSCLUSION
 static void render_embed_note(const char *target, int source_line, int link_index, int width)
 {
     int idx = find_note_by_target(target);
@@ -2024,6 +2038,7 @@ static void render_embed_note(const char *target, int source_line, int link_inde
     }
     fclose(fp);
 }
+#endif
 
 static void render_note_cache(int width)
 {
@@ -2038,7 +2053,9 @@ static void render_note_cache(int width)
     Heading temp_heading;
     int num_len;
     int attr;
+#if MEMEX_ENABLE_TRANSCLUSION
     char embed_target[MAX_TITLE];
+#endif
 
     if (width <= 0 || current_note < 0)
         return;
@@ -2066,10 +2083,12 @@ static void render_note_cache(int width)
                                       line_link, width);
             continue;
         }
+#if MEMEX_ENABLE_TRANSCLUSION
         if (parse_embed_target(view_lines[i], embed_target, sizeof(embed_target))) {
             render_embed_note(embed_target, i, line_link, width);
             continue;
         }
+#endif
         if (is_blank_line(view_lines[i])) {
             add_render_line("", A_NORMAL, i, line_link);
             continue;
@@ -3061,6 +3080,10 @@ static void build_mentions(void)
     int i;
 
     mention_count = 0;
+#if !MEMEX_ENABLE_MENTIONS
+    set_status("Unlinked mentions disabled");
+    return;
+#endif
     if (current_note < 0)
         return;
     for (i = 0; i < note_index[current_note].mention_count && i < MAX_MENTIONS; i++)
@@ -3133,7 +3156,8 @@ static void build_note_info(void)
     }
     sprintf(info_lines[line++], "Links out: %d", note_index[current_note].outbound_count);
     sprintf(info_lines[line++], "Backlinks: %d", note_index[current_note].backlink_count);
-    sprintf(info_lines[line++], "Unlinked mentions: %d", note_index[current_note].mention_count);
+    sprintf(info_lines[line++], "Unlinked mentions: %d",
+            MEMEX_ENABLE_MENTIONS ? note_index[current_note].mention_count : 0);
     when = (time_t)notes[current_note].mtime;
     tm_info = localtime(&when);
     if (tm_info && line < MAX_INFO_LINES) {
@@ -3148,6 +3172,10 @@ static void build_note_info(void)
 
 static void open_saved_searches(void)
 {
+#if !MEMEX_ENABLE_SAVED_SEARCHES
+    set_status("Saved searches disabled");
+    return;
+#endif
     if (saved_search_count == 0) {
         set_status("No saved searches");
         return;
@@ -3975,6 +4003,7 @@ static void cycle_theme(void)
 
 static void save_current_search(void)
 {
+#if MEMEX_ENABLE_SAVED_SEARCHES
     char name[MAX_TITLE];
     int i;
 
@@ -4005,6 +4034,9 @@ static void save_current_search(void)
     saved_search_count++;
     save_saved_searches();
     set_status("Saved search added");
+#else
+    set_status("Saved searches disabled");
+#endif
 }
 
 static void run_command_palette_action(int action)
@@ -4587,6 +4619,7 @@ static int smoke_write_special_file(const char *name, const char *text)
     return 1;
 }
 
+#if MEMEX_ENABLE_SAVED_SEARCHES
 static int smoke_file_contains_special(const char *name, const char *needle)
 {
     char path[MEMEX_PATH_MAX];
@@ -4606,6 +4639,7 @@ static int smoke_file_contains_special(const char *name, const char *needle)
     fclose(fp);
     return 0;
 }
+#endif
 
 static int smoke_sidebar_has_title(const char *title)
 {
@@ -4733,8 +4767,14 @@ static int run_smoke_tests(const char *dir)
         return 1;
     load_note_view(mention_idx);
     build_mentions();
+#if MEMEX_ENABLE_MENTIONS
     if (!smoke_expect(mention_count > 0, "mentions did not include Target"))
         return 1;
+#else
+    if (!smoke_expect(strcmp(status_msg, "Unlinked mentions disabled") == 0,
+                      "mentions disabled status missing"))
+        return 1;
+#endif
     load_note_view(target_idx);
     open_outline();
     if (!smoke_expect(current_panel == PANEL_OUTLINE, "outline panel did not open"))
@@ -4891,6 +4931,7 @@ static int run_persistence_tests(const char *dir)
     if (!smoke_expect(key_cycle_theme == 'z', "config key_theme did not load"))
         return 1;
 
+#if MEMEX_ENABLE_SAVED_SEARCHES
     saved_search_count = 1;
     copy_string(saved_searches[0].name, sizeof(saved_searches[0].name), "Phase8");
     copy_string(saved_searches[0].query, sizeof(saved_searches[0].query), "persist query");
@@ -4905,6 +4946,14 @@ static int run_persistence_tests(const char *dir)
                       && strcmp(saved_searches[0].query, "persist query") == 0,
                       "saved search content did not restore"))
         return 1;
+#else
+    saved_search_count = 1;
+    save_saved_searches();
+    saved_search_count = 0;
+    load_saved_searches();
+    if (!smoke_expect(saved_search_count == 0, "saved searches should stay disabled"))
+        return 1;
+#endif
 
     make_special_path(template_dir, sizeof(template_dir), template_dir_name);
     if (!smoke_expect(platform_mkdir(template_dir), "could not create template dir"))
@@ -4937,9 +4986,11 @@ static int run_persistence_tests(const char *dir)
     load_notes();
     if (!smoke_expect(find_note_by_target(daily_leaf) >= 0, "daily note was not created"))
         return 1;
+#if MEMEX_ENABLE_SAVED_SEARCHES
     if (!smoke_expect(smoke_file_contains_special(SAVED_SEARCH_FILE, "Phase8|persist query"),
                       "saved search file missing expected row"))
         return 1;
+#endif
 
     free_view();
     free_note_indices();

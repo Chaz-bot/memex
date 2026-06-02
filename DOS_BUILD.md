@@ -160,3 +160,31 @@ large_note: lines=192 editor_load=0.000s static_edit_buffer=246784 view_heap=900
 
 These are Linux-host measurements with `-DMEMEX_DOS_PROFILE`, not real DOS
 runtime measurements.
+
+Phase 10 adds optional feature-triage switches. All features remain enabled by
+default, including in `MEMEX_DOS_PROFILE`, because the host DOS-profile
+measurements do not justify reducing behavior before real DOS runtime testing.
+If hardware or emulator testing shows memory, indexing, recursion, or input
+problems, these switches can be added to `CFLAGS`:
+
+```text
+-DMEMEX_DISABLE_SAVED_SEARCHES
+-DMEMEX_DISABLE_MENTIONS
+-DMEMEX_DISABLE_TRANSCLUSION
+-DMEMEX_DISABLE_MOUSE
+```
+
+The compact configuration can be checked on the Linux host with:
+
+```sh
+make triage
+```
+
+and source-checked for the DOS build with:
+
+```sh
+make -f Makefile.dj check-triage
+```
+
+The existing DOS-profile limits for backlinks, mentions, rendered lines,
+results, and sidebar items were reviewed after Phase 9 and left unchanged.

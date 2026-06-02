@@ -27,7 +27,14 @@ performance: memex
 	rm -rf /tmp/memex-performance
 	./memex --performance-test /tmp/memex-performance
 
+triage:
+	$(CC) $(CFLAGS) -DMEMEX_DISABLE_SAVED_SEARCHES -DMEMEX_DISABLE_MENTIONS -DMEMEX_DISABLE_TRANSCLUSION -DMEMEX_DISABLE_MOUSE $(LDFLAGS) -o memex memex.c platform_posix.c $(LIBS)
+	rm -rf /tmp/memex-triage
+	rm -rf /tmp/memex-triage-persistence
+	./memex --smoke-test /tmp/memex-triage
+	./memex --persistence-test /tmp/memex-triage-persistence
+
 clean:
 	rm -f memex *.o core
 
-.PHONY: all install smoke persistence performance clean
+.PHONY: all install smoke persistence performance triage clean

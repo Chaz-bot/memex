@@ -155,14 +155,14 @@ machine.
 
 ## Phase 10: Feature Triage If Needed
 
-- [ ] Make saved searches optional if memory is tight.
-- [ ] Make unlinked mentions optional if indexing is too expensive.
-- [ ] Reduce backlink and mention limits if needed.
-- [ ] Reduce rendered line cache size if needed.
-- [ ] Reduce full-text search result count if needed.
-- [ ] Reduce folder sidebar detail if needed.
-- [ ] Consider disabling transclusion in the DOS profile if recursion or memory is problematic.
-- [ ] Consider disabling mouse support if it complicates PDCurses portability.
+- [x] Make saved searches optional if memory is tight.
+- [x] Make unlinked mentions optional if indexing is too expensive.
+- [x] Reduce backlink and mention limits if needed.
+- [x] Reduce rendered line cache size if needed.
+- [x] Reduce full-text search result count if needed.
+- [x] Reduce folder sidebar detail if needed.
+- [x] Consider disabling transclusion in the DOS profile if recursion or memory is problematic.
+- [x] Consider disabling mouse support if it complicates PDCurses portability.
 
 ## Phase 11: Documentation
 
