@@ -99,8 +99,8 @@ machine.
 ## Phase 6: First DOS Compile
 
 - [ ] Build with DJGPP and PDCurses.
-- [ ] Fix compiler errors without changing user-facing behavior.
-- [ ] Fix missing headers and incompatible declarations.
+- [x] Fix compiler errors without changing user-facing behavior.
+- [x] Fix missing headers and incompatible declarations.
 - [ ] Fix C library differences found by DJGPP.
 - [ ] Confirm the executable starts and exits cleanly.
 - [ ] Confirm startup creates or opens the note directory.

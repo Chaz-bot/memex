@@ -70,3 +70,22 @@ normalized there for Enter, Backspace, Tab, Shift-Tab, Escape, arrows, page
 navigation, and mouse events. Color setup also goes through the compatibility
 header. Mouse support is gated by curses capability detection and can be forced
 off with `-DMEMEX_DISABLE_MOUSE` for keyboard-only builds.
+
+Phase 6 source validation passes with:
+
+```sh
+make -f Makefile.dj check-syntax
+```
+
+That target compiles `memex.c` and `platform_dos.c` with `MEMEX_DOS_PROFILE`
+without linking PDCurses, which is useful on hosts that do not have the DOS
+library installed. A full `make -f Makefile.dj` currently requires a real DJGPP
+environment with PDCurses available. In this workspace, the full DOS build gets
+through compilation and stops at link because `-lpdcurses` is missing.
+
+For a Linux-hosted DJGPP cross compiler, pass the compiler explicitly, for
+example:
+
+```sh
+make -f Makefile.dj CC=i586-pc-msdosdjgpp-gcc
+```

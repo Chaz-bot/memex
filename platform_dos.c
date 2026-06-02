@@ -29,11 +29,7 @@ int platform_getcwd(char *buf, size_t size)
 
 int platform_mkdir(const char *path)
 {
-#ifdef __DJGPP__
     if (mkdir(path, 0777) == 0)
-#else
-    if (mkdir(path) == 0)
-#endif
         return 1;
     return errno == EEXIST && platform_is_dir(path);
 }
