@@ -86,15 +86,15 @@ machine.
 
 ## Phase 5: Isolate Curses Usage
 
-- [ ] Add a curses compatibility header, such as `ui_curses.h`.
-- [ ] Include curses through the compatibility header only.
-- [ ] Centralize color initialization.
-- [ ] Centralize keyboard normalization.
-- [ ] Normalize Enter, Backspace, Tab, Shift-Tab, Escape, and function-key behavior.
+- [x] Add a curses compatibility header, such as `ui_curses.h`.
+- [x] Include curses through the compatibility header only.
+- [x] Centralize color initialization.
+- [x] Centralize keyboard normalization.
+- [x] Normalize Enter, Backspace, Tab, Shift-Tab, Escape, and function-key behavior.
 - [ ] Confirm arrow, page up, page down, home, and end keys under PDCurses.
-- [ ] Gate mouse support behind a compile-time capability check.
-- [ ] Confirm keyboard-only operation works without mouse support.
-- [ ] Keep Linux ncurses behavior unchanged.
+- [x] Gate mouse support behind a compile-time capability check.
+- [x] Confirm keyboard-only operation works without mouse support.
+- [x] Keep Linux ncurses behavior unchanged.
 
 ## Phase 6: First DOS Compile
 

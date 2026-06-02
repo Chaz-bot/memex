@@ -64,3 +64,9 @@ long filename support for the first port, so dot-prefixed support names such as
 `.memex-state`, `.memexrc`, `.trash`, and `.templates` are intentionally kept.
 New note titles are sanitized for DOS-reserved device names and trailing
 dot/space characters.
+
+Phase 5 adds `ui_curses.h` as the only direct curses include. Key input is
+normalized there for Enter, Backspace, Tab, Shift-Tab, Escape, arrows, page
+navigation, and mouse events. Color setup also goes through the compatibility
+header. Mouse support is gated by curses capability detection and can be forced
+off with `-DMEMEX_DISABLE_MOUSE` for keyboard-only builds.

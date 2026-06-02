@@ -8,7 +8,6 @@
  */
 
 #include <ctype.h>
-#include <curses.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdio.h>
@@ -19,12 +18,9 @@
 
 #include "memex_config.h"
 #include "platform.h"
+#include "ui_curses.h"
 
 #define CTRL_KEY(x) ((x) & 037)
-
-#ifndef KEY_BTAB
-#define KEY_BTAB '\t'
-#endif
 
 typedef struct {
     char title[MAX_TITLE];
@@ -245,7 +241,7 @@ static void build_note_indices(void);
 static void init_theme(void);
 static int case_equals(const char *a, const char *b);
 static void handle_main_key(int ch);
-#ifdef KEY_MOUSE
+#if MEMEX_HAS_CURSES_MOUSE
 static int mouse_wheel_up(mmask_t state);
 static int mouse_wheel_down(mmask_t state);
 static int mouse_left_click(mmask_t state);
@@ -2301,7 +2297,7 @@ static int prompt_text(const char *prompt, char *out, size_t out_size)
 
     curs_set(1);
     nodelay(stdscr, FALSE);
-    keypad(stdscr, TRUE);
+    ui_init_keyboard();
 
     for (;;) {
         move(y, 0);
@@ -2310,16 +2306,16 @@ static int prompt_text(const char *prompt, char *out, size_t out_size)
         printw("%s%s", prompt, out);
         attroff(A_REVERSE);
         refresh();
-        ch = getch();
-        if (ch == 27) {
+        ch = ui_read_key();
+        if (ui_key_is_escape(ch)) {
             curs_set(0);
             return 0;
         }
-        if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
+        if (ui_key_is_enter(ch)) {
             curs_set(0);
             return 1;
         }
-        if (ch == KEY_BACKSPACE || ch == 127 || ch == 8) {
+        if (ui_key_is_backspace(ch)) {
             if (len > 0)
                 out[--len] = '\0';
         } else if (isprint(ch) && len + 1 < out_size) {
@@ -3738,7 +3734,7 @@ static int editor_find_next(const char *query)
     return 0;
 }
 
-#ifdef KEY_MOUSE
+#if MEMEX_HAS_CURSES_MOUSE
 static void handle_editor_mouse(void)
 {
     MEVENT ev;
@@ -3801,15 +3797,15 @@ static void run_editor(void)
     curs_set(1);
     for (;;) {
         draw_editor();
-        ch = getch();
+        ch = ui_read_key();
         len = (int)strlen(edit_lines[edit_y]);
-#ifdef KEY_MOUSE
-        if (ch == KEY_MOUSE) {
+#if MEMEX_HAS_CURSES_MOUSE
+        if (ui_key_is_mouse(ch)) {
             handle_editor_mouse();
             continue;
         }
 #endif
-        if (ch == 27) {
+        if (ui_key_is_escape(ch)) {
             if (edit_dirty && !edit_quit_confirm) {
                 set_status("Unsaved changes: Esc again to discard");
                 edit_quit_confirm = 1;
@@ -3848,27 +3844,27 @@ static void run_editor(void)
                 set_status("No further match");
             continue;
         }
-        if (ch == KEY_UP || ch == CTRL_KEY('p')) {
+        if (ui_key_is_up(ch) || ch == CTRL_KEY('p')) {
             if (edit_y > 0)
                 edit_y--;
             if (edit_x > (int)strlen(edit_lines[edit_y]))
                 edit_x = (int)strlen(edit_lines[edit_y]);
-        } else if (ch == KEY_DOWN || ch == CTRL_KEY('n')) {
+        } else if (ui_key_is_down(ch) || ch == CTRL_KEY('n')) {
             if (edit_y + 1 < edit_line_count)
                 edit_y++;
             if (edit_x > (int)strlen(edit_lines[edit_y]))
                 edit_x = (int)strlen(edit_lines[edit_y]);
-        } else if (ch == KEY_LEFT || ch == CTRL_KEY('b')) {
+        } else if (ui_key_is_left(ch) || ch == CTRL_KEY('b')) {
             if (edit_x > 0)
                 edit_x--;
-        } else if (ch == KEY_RIGHT || ch == CTRL_KEY('f')) {
+        } else if (ui_key_is_right(ch) || ch == CTRL_KEY('f')) {
             if (edit_x < len)
                 edit_x++;
-        } else if (ch == KEY_BACKSPACE || ch == 127 || ch == 8) {
+        } else if (ui_key_is_backspace(ch)) {
             editor_backspace();
-        } else if (ch == '\t') {
+        } else if (ui_key_is_tab(ch)) {
             editor_autocomplete_link();
-        } else if (ch == '\n' || ch == '\r') {
+        } else if (ui_key_is_enter(ch)) {
             editor_newline();
         } else if (isprint(ch)) {
             editor_insert_char(ch);
@@ -4068,11 +4064,11 @@ static void handle_panel_key(int ch)
 {
     int idx;
 
-    if (ch == 27) {
+    if (ui_key_is_escape(ch)) {
         current_panel = PANEL_NOTE;
         return;
     }
-    if (ch == KEY_UP || ch == 'k') {
+    if (ui_key_is_up(ch) || ch == 'k') {
         if (current_panel == PANEL_BACKLINKS)
             panel_move(-1, backlink_count);
         else if (current_panel == PANEL_SEARCH)
@@ -4091,7 +4087,7 @@ static void handle_panel_key(int ch)
             panel_move(-1, 17);
         return;
     }
-    if (ch == KEY_DOWN || ch == 'j') {
+    if (ui_key_is_down(ch) || ch == 'j') {
         if (current_panel == PANEL_BACKLINKS)
             panel_move(1, backlink_count);
         else if (current_panel == PANEL_SEARCH)
@@ -4110,7 +4106,7 @@ static void handle_panel_key(int ch)
             panel_move(1, 17);
         return;
     }
-    if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
+    if (ui_key_is_enter(ch)) {
         if (current_panel == PANEL_BACKLINKS && panel_selected < backlink_count) {
             idx = backlink_indices[panel_selected];
             open_note_recording_history(idx, 0);
@@ -4145,7 +4141,7 @@ static void handle_panel_key(int ch)
     }
 }
 
-#ifdef KEY_MOUSE
+#if MEMEX_HAS_CURSES_MOUSE
 static int panel_item_count(void)
 {
     if (current_panel == PANEL_BACKLINKS)
@@ -4297,7 +4293,7 @@ static void handle_main_mouse(void)
         if (idx >= 0 && idx < total) {
             panel_selected = idx;
             if (mouse_left_double_click(ev.bstate))
-                handle_panel_key('\n');
+                handle_panel_key(MEMEX_KEY_ENTER);
         }
         return;
     }
@@ -4332,8 +4328,8 @@ static void handle_main_key(int ch)
     char input[MAX_TITLE];
     SidebarItem *item;
 
-#ifdef KEY_MOUSE
-    if (ch == KEY_MOUSE) {
+#if MEMEX_HAS_CURSES_MOUSE
+    if (ui_key_is_mouse(ch)) {
         status_msg[0] = '\0';
         handle_main_mouse();
         return;
@@ -4349,21 +4345,21 @@ static void handle_main_key(int ch)
     build_sidebar();
     if (ch == 'q' || ch == CTRL_KEY('c')) {
         running = 0;
-    } else if (ch == KEY_UP || ch == 'k') {
+    } else if (ui_key_is_up(ch) || ch == 'k') {
         if (selected_note > 0)
             selected_note--;
-    } else if (ch == KEY_DOWN || ch == 'j') {
+    } else if (ui_key_is_down(ch) || ch == 'j') {
         if (selected_note + 1 < visible_total)
             selected_note++;
-    } else if (ch == KEY_NPAGE || ch == ' ') {
+    } else if (ui_key_is_page_down(ch) || ch == ' ') {
         selected_note += LINES - 4;
         if (selected_note >= visible_total)
             selected_note = visible_total > 0 ? visible_total - 1 : 0;
-    } else if (ch == KEY_PPAGE) {
+    } else if (ui_key_is_page_up(ch)) {
         selected_note -= LINES - 4;
         if (selected_note < 0)
             selected_note = 0;
-    } else if (ch == KEY_LEFT || ch == 'h') {
+    } else if (ui_key_is_left(ch) || ch == 'h') {
         if (show_sidebar && selected_note >= 0 && selected_note < sidebar_item_count) {
             item = &sidebar_items[selected_note];
             if (item->kind == SIDEBAR_KIND_DIR && dirs[item->dir_index].expanded) {
@@ -4375,7 +4371,7 @@ static void handle_main_key(int ch)
         } else if (note_scroll > 0) {
             note_scroll--;
         }
-    } else if (ch == KEY_RIGHT || ch == 'l') {
+    } else if (ui_key_is_right(ch) || ch == 'l') {
         if (show_sidebar && selected_note >= 0 && selected_note < sidebar_item_count) {
             item = &sidebar_items[selected_note];
             if (item->kind == SIDEBAR_KIND_DIR && !dirs[item->dir_index].expanded) {
@@ -4387,7 +4383,7 @@ static void handle_main_key(int ch)
         } else {
             note_scroll++;
         }
-    } else if (ch == '\n' || ch == '\r' || ch == KEY_ENTER) {
+    } else if (ui_key_is_enter(ch)) {
         if (selected_note >= 0 && selected_note < sidebar_item_count) {
             item = &sidebar_items[selected_note];
             if (item->kind == SIDEBAR_KIND_DIR) {
@@ -4402,10 +4398,10 @@ static void handle_main_key(int ch)
                 }
             }
         }
-    } else if (ch == '\t') {
+    } else if (ui_key_is_tab(ch)) {
         if (link_count > 0)
             selected_link = (selected_link + 1) % link_count;
-    } else if (ch == KEY_BTAB) {
+    } else if (ui_key_is_backtab(ch)) {
         if (link_count > 0)
             selected_link = (selected_link + link_count - 1) % link_count;
     } else if (ch == key_new_note) {
@@ -4438,7 +4434,7 @@ static void handle_main_key(int ch)
         input[0] = '\0';
         if (prompt_text("Find in notes: ", input, sizeof(input)))
             run_full_text_search(input);
-    } else if (ch == 27) {
+    } else if (ui_key_is_escape(ch)) {
         note_filter[0] = '\0';
     } else if (ch == key_backlinks) {
         build_backlinks();
@@ -4487,30 +4483,14 @@ static void on_signal(int sig)
 
 static void init_theme(void)
 {
-    short fg = COLOR_WHITE;
-    short bg = COLOR_BLUE;
     int idx;
 
-    if (!has_colors())
-        return;
     idx = theme_index_from_name(theme_name);
     copy_string(theme_name, sizeof(theme_name), theme_names[idx]);
-    if (idx == 1) {
-        fg = COLOR_YELLOW;
-        bg = COLOR_BLACK;
-    } else if (idx == 2) {
-        fg = COLOR_GREEN;
-        bg = COLOR_BLACK;
-    } else if (idx == 3) {
-        fg = COLOR_CYAN;
-        bg = COLOR_BLACK;
-    }
-    start_color();
-    init_pair(1, fg, bg);
-    bkgd(COLOR_PAIR(1));
+    ui_start_theme_color(theme_name);
 }
 
-#ifdef KEY_MOUSE
+#if MEMEX_HAS_CURSES_MOUSE
 static void init_mouse(void)
 {
     mmask_t mask = 0;
@@ -4589,9 +4569,9 @@ int main(int argc, char **argv)
     initscr();
     cbreak();
     noecho();
-    keypad(stdscr, TRUE);
+    ui_init_keyboard();
     init_theme();
-#ifdef KEY_MOUSE
+#if MEMEX_HAS_CURSES_MOUSE
     init_mouse();
 #endif
     curs_set(0);
@@ -4602,7 +4582,7 @@ int main(int argc, char **argv)
     set_status("p palette  f search  b backlinks  u mentions  v saved  i info  Enter open/follow  e edit  q quit");
     while (running) {
         draw_main();
-        ch = getch();
+        ch = ui_read_key();
         handle_main_key(ch);
     }
 
