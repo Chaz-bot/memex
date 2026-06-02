@@ -107,3 +107,20 @@ save/reopen, nested notes, link following, title filtering, full-text search,
 backlinks, mentions, tags, outline, command-palette state, rename link rewrite,
 and trash behavior. It does not initialize curses, so it can run in a DOS
 environment once `memex.exe` links.
+
+Phase 8 adds a noninteractive persistence/config test:
+
+```sh
+./memex --persistence-test /tmp/memex-persistence
+```
+
+On the Linux host this is also available through:
+
+```sh
+make persistence
+```
+
+The persistence test writes and reloads `.memex-state`, `.memexrc`, saved
+searches, template files, and the daily-note format file. It verifies sidebar
+visibility, read/write mode, theme/config/key overrides, saved-search
+persistence, template expansion, and daily note naming.

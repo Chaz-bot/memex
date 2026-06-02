@@ -19,7 +19,11 @@ smoke: memex
 	rm -rf /tmp/memex-smoke
 	./memex --smoke-test /tmp/memex-smoke
 
+persistence: memex
+	rm -rf /tmp/memex-persistence
+	./memex --persistence-test /tmp/memex-persistence
+
 clean:
 	rm -f memex *.o core
 
-.PHONY: all install smoke clean
+.PHONY: all install smoke persistence clean

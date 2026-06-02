@@ -4573,6 +4573,40 @@ static int smoke_file_contains_rel(const char *rel_path, const char *needle)
     return 0;
 }
 
+static int smoke_write_special_file(const char *name, const char *text)
+{
+    char path[MEMEX_PATH_MAX];
+    FILE *fp;
+
+    make_special_path(path, sizeof(path), name);
+    fp = fopen(path, "w");
+    if (!fp)
+        return smoke_fail("could not write special smoke file");
+    fputs(text, fp);
+    fclose(fp);
+    return 1;
+}
+
+static int smoke_file_contains_special(const char *name, const char *needle)
+{
+    char path[MEMEX_PATH_MAX];
+    FILE *fp;
+    char buf[MAX_LINE + 2];
+
+    make_special_path(path, sizeof(path), name);
+    fp = fopen(path, "r");
+    if (!fp)
+        return 0;
+    while (fgets(buf, sizeof(buf), fp)) {
+        if (strstr(buf, needle)) {
+            fclose(fp);
+            return 1;
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
 static int smoke_sidebar_has_title(const char *title)
 {
     int i;
@@ -4748,6 +4782,171 @@ static int run_smoke_tests(const char *dir)
     return 0;
 }
 
+static void reset_persistence_settings(void)
+{
+    show_sidebar = 1;
+    read_mode = 1;
+    sort_mode = SORT_ALPHA;
+    active_tag[0] = '\0';
+    last_open_title[0] = '\0';
+    copy_string(theme_name, sizeof(theme_name), "plain");
+    copy_string(startup_mode, sizeof(startup_mode), "last");
+    copy_string(trash_dir_name, sizeof(trash_dir_name), TRASH_DIR);
+    copy_string(template_dir_name, sizeof(template_dir_name), TEMPLATE_DIR);
+    key_new_note = 'n';
+    key_template_note = 't';
+    key_daily_note = 'D';
+    key_edit_note = 'e';
+    key_delete_note = 'd';
+    key_rename_note = 'r';
+    key_filter_titles = '/';
+    key_full_text_search = 'f';
+    key_backlinks = 'b';
+    key_mentions = 'u';
+    key_outline = 'o';
+    key_tags = 'g';
+    key_saved_searches = 'v';
+    key_command_palette = 'p';
+    key_note_info = 'i';
+    key_cycle_theme = 'T';
+}
+
+static int run_persistence_tests(const char *dir)
+{
+    char template_dir[MEMEX_PATH_MAX];
+    char template_path[MEMEX_PATH_MAX];
+    char daily_format[MAX_TITLE];
+    char daily_title[MEMEX_PATH_MAX];
+    char daily_leaf[MAX_TITLE];
+    time_t now;
+    struct tm *tm_now;
+    FILE *fp;
+    int idx;
+
+    copy_string(note_dir, sizeof(note_dir), dir);
+    strip_trailing_platform_seps(note_dir);
+    reset_persistence_settings();
+    load_notes();
+
+    if (!smoke_expect(create_note("Persisted"), "could not create persisted note"))
+        return 1;
+    idx = find_note_by_target("Persisted");
+    if (!smoke_expect(idx >= 0, "could not find persisted note"))
+        return 1;
+    load_note_view(idx);
+    show_sidebar = 0;
+    read_mode = 0;
+    sort_mode = SORT_MTIME;
+    copy_string(theme_name, sizeof(theme_name), "forest");
+    copy_string(active_tag, sizeof(active_tag), "phase8");
+    save_state();
+
+    show_sidebar = 1;
+    read_mode = 1;
+    sort_mode = SORT_ALPHA;
+    theme_name[0] = '\0';
+    active_tag[0] = '\0';
+    last_open_title[0] = '\0';
+    load_state();
+    if (!smoke_expect(show_sidebar == 0, "sidebar visibility did not restore"))
+        return 1;
+    if (!smoke_expect(read_mode == 0, "read/write mode did not restore"))
+        return 1;
+    if (!smoke_expect(sort_mode == SORT_MTIME, "sort mode did not restore"))
+        return 1;
+    if (!smoke_expect(strcmp(theme_name, "forest") == 0, "theme did not restore from state"))
+        return 1;
+    if (!smoke_expect(strcmp(active_tag, "phase8") == 0, "active tag did not restore"))
+        return 1;
+    if (!smoke_expect(strcmp(last_open_title, "Persisted") == 0, "last note did not restore"))
+        return 1;
+
+    if (!smoke_expect(smoke_write_special_file(CONFIG_FILE,
+                                               "theme=amber\n"
+                                               "default_mode=write\n"
+                                               "startup=daily\n"
+                                               "trash_dir=.dust\n"
+                                               "template_dir=.tpl\n"
+                                               "key_new=x\n"
+                                               "key_search=space\n"
+                                               "key_theme=z\n"),
+                      "could not write config"))
+        return 1;
+    reset_persistence_settings();
+    load_config();
+    if (!smoke_expect(strcmp(theme_name, "amber") == 0, "config theme did not load"))
+        return 1;
+    if (!smoke_expect(read_mode == 0, "config default_mode did not load"))
+        return 1;
+    if (!smoke_expect(strcmp(startup_mode, "daily") == 0, "config startup did not load"))
+        return 1;
+    if (!smoke_expect(strcmp(trash_dir_name, ".dust") == 0, "config trash_dir did not load"))
+        return 1;
+    if (!smoke_expect(strcmp(template_dir_name, ".tpl") == 0, "config template_dir did not load"))
+        return 1;
+    if (!smoke_expect(key_new_note == 'x', "config key_new did not load"))
+        return 1;
+    if (!smoke_expect(key_full_text_search == ' ', "config key_search did not load"))
+        return 1;
+    if (!smoke_expect(key_cycle_theme == 'z', "config key_theme did not load"))
+        return 1;
+
+    saved_search_count = 1;
+    copy_string(saved_searches[0].name, sizeof(saved_searches[0].name), "Phase8");
+    copy_string(saved_searches[0].query, sizeof(saved_searches[0].query), "persist query");
+    save_saved_searches();
+    saved_search_count = 0;
+    saved_searches[0].name[0] = '\0';
+    saved_searches[0].query[0] = '\0';
+    load_saved_searches();
+    if (!smoke_expect(saved_search_count == 1, "saved search count did not restore"))
+        return 1;
+    if (!smoke_expect(strcmp(saved_searches[0].name, "Phase8") == 0
+                      && strcmp(saved_searches[0].query, "persist query") == 0,
+                      "saved search content did not restore"))
+        return 1;
+
+    make_special_path(template_dir, sizeof(template_dir), template_dir_name);
+    if (!smoke_expect(platform_mkdir(template_dir), "could not create template dir"))
+        return 1;
+    copy_string(template_path, sizeof(template_path), template_dir);
+    append_platform_path_part(template_path, sizeof(template_path), DEFAULT_TEMPLATE);
+    fp = fopen(template_path, "w");
+    if (!fp)
+        return smoke_fail("could not write default template");
+    fputs("# {{title}} From Template\n\nphase8-template\n", fp);
+    fclose(fp);
+    if (!smoke_expect(create_note_with_template("Templated", DEFAULT_TEMPLATE),
+                      "could not create templated note"))
+        return 1;
+    if (!smoke_expect(smoke_file_contains_rel("Templated.md", "# Templated From Template"),
+                      "template title replacement failed"))
+        return 1;
+
+    copy_string(daily_format, sizeof(daily_format), "Log/%Y%m%d");
+    if (!smoke_expect(smoke_write_special_file(DAILY_FORMAT_FILE, daily_format),
+                      "could not write daily format"))
+        return 1;
+    now = time(NULL);
+    tm_now = localtime(&now);
+    if (!smoke_expect(tm_now != NULL, "could not get local time"))
+        return 1;
+    strftime(daily_title, sizeof(daily_title), daily_format, tm_now);
+    strip_md_suffix(path_basename(daily_title), daily_leaf, sizeof(daily_leaf));
+    open_daily_note();
+    load_notes();
+    if (!smoke_expect(find_note_by_target(daily_leaf) >= 0, "daily note was not created"))
+        return 1;
+    if (!smoke_expect(smoke_file_contains_special(SAVED_SEARCH_FILE, "Phase8|persist query"),
+                      "saved search file missing expected row"))
+        return 1;
+
+    free_view();
+    free_note_indices();
+    printf("persistence: PASS\n");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int ch;
@@ -4767,6 +4966,19 @@ int main(int argc, char **argv)
             return 2;
         }
         rc = run_smoke_tests(argv[2]);
+        platform_shutdown();
+        return rc;
+    }
+
+    if (argc > 1 && strcmp(argv[1], "--persistence-test") == 0) {
+        int rc;
+
+        if (argc < 3) {
+            fprintf(stderr, "usage: memex --persistence-test DIR\n");
+            platform_shutdown();
+            return 2;
+        }
+        rc = run_persistence_tests(argv[2]);
         platform_shutdown();
         return rc;
     }

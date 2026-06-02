@@ -129,15 +129,15 @@ machine.
 
 ## Phase 8: Persistence And Config Tests
 
-- [ ] Save and restore `.memex-state`.
-- [ ] Save and restore sidebar visibility.
-- [ ] Save and restore read/write mode.
-- [ ] Load `.memexrc`.
-- [ ] Confirm keybinding overrides work.
-- [ ] Confirm theme selection works.
-- [ ] Confirm saved searches load and save.
-- [ ] Confirm templates load from the template directory.
-- [ ] Confirm daily note naming works.
+- [x] Save and restore `.memex-state`.
+- [x] Save and restore sidebar visibility.
+- [x] Save and restore read/write mode.
+- [x] Load `.memexrc`.
+- [x] Confirm keybinding overrides work.
+- [x] Confirm theme selection works.
+- [x] Confirm saved searches load and save.
+- [x] Confirm templates load from the template directory.
+- [x] Confirm daily note naming works.
 
 ## Phase 9: Performance And Memory Pass
 
