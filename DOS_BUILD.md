@@ -52,3 +52,8 @@ are added in later phases.
 Phase 2 adds `memex_config.h` and makes `MEMEX_DOS_PROFILE` select smaller
 compile-time limits. On the Linux host compiler, the normal profile builds with
 about 13.4 MB of BSS, while the DOS profile builds with about 1.67 MB of BSS.
+
+Phase 3 adds `platform.h`, `platform_posix.c`, and `platform_dos.c`. The Linux
+build links `platform_posix.c`; the DJGPP build links `platform_dos.c`. Direct
+directory traversal, current-directory lookup, directory creation, stat checks,
+and rename calls from `memex.c` now go through the platform layer.

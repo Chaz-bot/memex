@@ -9,19 +9,16 @@
 
 #include <ctype.h>
 #include <curses.h>
-#include <dirent.h>
-#include <errno.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "memex_config.h"
+#include "platform.h"
 
 #define CTRL_KEY(x) ((x) & 037)
 
@@ -603,17 +600,26 @@ static int sidebar_width(void)
     return left_w;
 }
 
+static void append_platform_sep(char *out, size_t out_size)
+{
+    char sep[2];
+
+    sep[0] = platform_path_sep();
+    sep[1] = '\0';
+    append_string(out, out_size, sep);
+}
+
 static void make_path(char *out, size_t out_size, const char *file)
 {
     copy_string(out, out_size, note_dir);
-    append_string(out, out_size, "/");
+    append_platform_sep(out, out_size);
     append_string(out, out_size, file);
 }
 
 static void make_special_path(char *out, size_t out_size, const char *name)
 {
     copy_string(out, out_size, note_dir);
-    append_string(out, out_size, "/");
+    append_platform_sep(out, out_size);
     append_string(out, out_size, name);
 }
 
@@ -1228,16 +1234,16 @@ static void note_collect_metadata(Note *note)
     char path[MEMEX_PATH_MAX];
     FILE *fp;
     char buf[MAX_LINE + 2];
-    struct stat st;
+    PlatformStat st;
 
     note->tag_count = 0;
     note->alias_count = 0;
     note->pinned = 0;
     copy_string(note->display_title, sizeof(note->display_title), note->title);
     make_path(path, sizeof(path), note->rel_path);
-    if (stat(path, &st) == 0) {
-        note->mtime = (long)st.st_mtime;
-        note->ctime = (long)st.st_ctime;
+    if (platform_stat(path, &st)) {
+        note->mtime = st.mtime;
+        note->ctime = st.ctime;
     } else {
         note->mtime = 0;
         note->ctime = 0;
@@ -1276,46 +1282,46 @@ static void load_note_entry(const char *rel_path)
 static void scan_notes_recursive(const char *rel_dir)
 {
     char path[MEMEX_PATH_MAX];
-    DIR *dir;
-    struct dirent *ent;
+    PlatformDir *dir;
+    char ent_name[MEMEX_PATH_MAX];
 
     if (rel_dir[0]) {
         make_path(path, sizeof(path), rel_dir);
     } else {
         copy_string(path, sizeof(path), note_dir);
     }
-    dir = opendir(path);
+    dir = platform_opendir(path);
     if (!dir)
         return;
-    while ((ent = readdir(dir)) != NULL && note_count < MAX_NOTES) {
+    while (platform_readdir(dir, ent_name, sizeof(ent_name)) && note_count < MAX_NOTES) {
         char child_rel[MEMEX_PATH_MAX];
         char child_path[MEMEX_PATH_MAX];
-        struct stat st;
+        PlatformStat st;
 
-        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+        if (strcmp(ent_name, ".") == 0 || strcmp(ent_name, "..") == 0)
             continue;
-        if (strcmp(ent->d_name, trash_dir_name) == 0
-            || strcmp(ent->d_name, template_dir_name) == 0)
+        if (strcmp(ent_name, trash_dir_name) == 0
+            || strcmp(ent_name, template_dir_name) == 0)
             continue;
-        if (ent->d_name[0] == '.' && !has_md_suffix(ent->d_name))
+        if (ent_name[0] == '.' && !has_md_suffix(ent_name))
             continue;
         child_rel[0] = '\0';
         if (rel_dir[0]) {
             copy_string(child_rel, sizeof(child_rel), rel_dir);
             append_string(child_rel, sizeof(child_rel), "/");
         }
-        append_string(child_rel, sizeof(child_rel), ent->d_name);
+        append_string(child_rel, sizeof(child_rel), ent_name);
         make_path(child_path, sizeof(child_path), child_rel);
-        if (stat(child_path, &st) != 0)
+        if (!platform_stat(child_path, &st))
             continue;
-        if (S_ISDIR(st.st_mode)) {
+        if (st.is_dir) {
             ensure_dir_entry(child_rel);
             scan_notes_recursive(child_rel);
-        } else if (has_md_suffix(ent->d_name)) {
+        } else if (has_md_suffix(ent_name)) {
             load_note_entry(child_rel);
         }
     }
-    closedir(dir);
+    platform_closedir(dir);
 }
 
 static int note_matches_current_filters(int note_idx)
@@ -1423,20 +1429,15 @@ static void load_notes(void)
     note_count = 0;
     dir_count = 0;
     clear_tag_cache();
-    {
-        DIR *dir = opendir(note_dir);
-        if (!dir) {
-            if (mkdir(note_dir, 0777) != 0 && errno != EEXIST) {
-                set_status("Could not create note directory");
-                return;
-            }
-            dir = opendir(note_dir);
-            if (!dir) {
-                set_status("Could not open note directory");
-                return;
-            }
+    if (!platform_is_dir(note_dir)) {
+        if (!platform_mkdir(note_dir)) {
+            set_status("Could not create note directory");
+            return;
         }
-        closedir(dir);
+    }
+    if (!platform_is_dir(note_dir)) {
+        set_status("Could not open note directory");
+        return;
     }
 
     scan_notes_recursive("");
@@ -2292,11 +2293,11 @@ static int ensure_parent_dirs(const char *rel_path)
 
     make_path(full, sizeof(full), rel_path);
     for (p = full + strlen(note_dir) + 1; *p; p++) {
-        if (*p == '/') {
+        if (*p == '/' || *p == '\\') {
             *p = '\0';
-            if (mkdir(full, 0777) != 0 && errno != EEXIST)
+            if (!platform_mkdir(full))
                 return 0;
-            *p = '/';
+            *p = platform_path_sep();
         }
     }
     return 1;
@@ -2305,9 +2306,9 @@ static int ensure_parent_dirs(const char *rel_path)
 static void make_template_path(char *out, size_t out_size, const char *name)
 {
     copy_string(out, out_size, note_dir);
-    append_string(out, out_size, "/");
+    append_platform_sep(out, out_size);
     append_string(out, out_size, template_dir_name);
-    append_string(out, out_size, "/");
+    append_platform_sep(out, out_size);
     append_string(out, out_size, name);
 }
 
@@ -2430,12 +2431,11 @@ static void open_daily_note(void)
 static int ensure_trash_dir(void)
 {
     char path[MEMEX_PATH_MAX];
-    struct stat st;
 
     make_special_path(path, sizeof(path), trash_dir_name);
-    if (stat(path, &st) == 0)
-        return S_ISDIR(st.st_mode);
-    if (mkdir(path, 0777) == 0)
+    if (platform_is_dir(path))
+        return 1;
+    if (platform_mkdir(path))
         return 1;
     return 0;
 }
@@ -2445,21 +2445,18 @@ static void build_trash_path(const char *file, char *out, size_t out_size)
     char dir_path[MEMEX_PATH_MAX];
     char candidate[MEMEX_PATH_MAX];
     int attempt = 0;
-    FILE *fp;
 
     make_special_path(dir_path, sizeof(dir_path), trash_dir_name);
     for (;;) {
         if (attempt == 0) {
             copy_string(candidate, sizeof(candidate), dir_path);
-            append_string(candidate, sizeof(candidate), "/");
+            append_platform_sep(candidate, sizeof(candidate));
             append_string(candidate, sizeof(candidate), file);
         } else {
-            sprintf(candidate, "%s/%d-%s", dir_path, attempt, file);
+            sprintf(candidate, "%s%c%d-%s", dir_path, platform_path_sep(), attempt, file);
         }
-        fp = fopen(candidate, "r");
-        if (!fp)
+        if (!platform_file_exists(candidate))
             break;
-        fclose(fp);
         attempt++;
     }
     copy_string(out, out_size, candidate);
@@ -2478,7 +2475,7 @@ static void delete_current_note(void)
     }
     make_path(path, sizeof(path), notes[current_note].file);
     build_trash_path(notes[current_note].file, trash_path, sizeof(trash_path));
-    if (rename(path, trash_path) != 0) {
+    if (!platform_rename(path, trash_path)) {
         set_status("Could not move note to trash");
         return;
     }
@@ -2579,7 +2576,7 @@ static int rewrite_file_links(const char *file_name, const char *old_title,
     fclose(out);
 
     if (changed) {
-        if (rename(temp_path, path) != 0)
+        if (!platform_rename(temp_path, path))
             unlink(temp_path);
     } else {
         unlink(temp_path);
@@ -2591,41 +2588,41 @@ static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
                                     const char *new_title)
 {
     char path[MEMEX_PATH_MAX];
-    DIR *dir;
-    struct dirent *ent;
+    PlatformDir *dir;
+    char ent_name[MEMEX_PATH_MAX];
 
     if (rel_dir[0])
         make_path(path, sizeof(path), rel_dir);
     else
         copy_string(path, sizeof(path), note_dir);
-    dir = opendir(path);
+    dir = platform_opendir(path);
     if (!dir)
         return;
-    while ((ent = readdir(dir)) != NULL) {
+    while (platform_readdir(dir, ent_name, sizeof(ent_name))) {
         char child_rel[MEMEX_PATH_MAX];
         char child_path[MEMEX_PATH_MAX];
-        struct stat st;
+        PlatformStat st;
 
-        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+        if (strcmp(ent_name, ".") == 0 || strcmp(ent_name, "..") == 0)
             continue;
         child_rel[0] = '\0';
         if (rel_dir[0]) {
             copy_string(child_rel, sizeof(child_rel), rel_dir);
             append_string(child_rel, sizeof(child_rel), "/");
         }
-        append_string(child_rel, sizeof(child_rel), ent->d_name);
+        append_string(child_rel, sizeof(child_rel), ent_name);
         make_path(child_path, sizeof(child_path), child_rel);
-        if (stat(child_path, &st) != 0)
+        if (!platform_stat(child_path, &st))
             continue;
-        if (S_ISDIR(st.st_mode)) {
-            if (strcmp(ent->d_name, trash_dir_name) != 0
-                && strcmp(ent->d_name, template_dir_name) != 0)
+        if (st.is_dir) {
+            if (strcmp(ent_name, trash_dir_name) != 0
+                && strcmp(ent_name, template_dir_name) != 0)
                 rewrite_links_recursive(child_rel, old_title, new_title);
-        } else if (has_md_suffix(ent->d_name)) {
+        } else if (has_md_suffix(ent_name)) {
             rewrite_file_links(child_rel, old_title, new_title);
         }
     }
-    closedir(dir);
+    platform_closedir(dir);
 }
 
 static void rewrite_links_for_rename(const char *old_title, const char *new_title)
@@ -2667,7 +2664,7 @@ static void rename_current_note(void)
         return;
     }
     copy_string(old_title, sizeof(old_title), notes[current_note].title);
-    if (rename(old_path, new_path) != 0) {
+    if (!platform_rename(old_path, new_path)) {
         set_status("Could not rename note");
         return;
     }
@@ -4444,11 +4441,17 @@ int main(int argc, char **argv)
     int ch;
     int i;
 
+    if (!platform_init()) {
+        fprintf(stderr, "memex: could not initialize platform\n");
+        return 1;
+    }
+
     if (argc > 1) {
         copy_string(note_dir, sizeof(note_dir), argv[1]);
     } else {
-        if (!getcwd(note_dir, sizeof(note_dir))) {
+        if (!platform_getcwd(note_dir, sizeof(note_dir))) {
             fprintf(stderr, "memex: could not get current directory\n");
+            platform_shutdown();
             return 1;
         }
     }
@@ -4498,5 +4501,6 @@ int main(int argc, char **argv)
     endwin();
     free_view();
     free_note_indices();
+    platform_shutdown();
     return 0;
 }

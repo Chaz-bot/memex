@@ -49,23 +49,23 @@ machine.
 
 ## Phase 3: Add A Platform Layer
 
-- [ ] Add `platform.h`.
-- [ ] Add `platform_posix.c`.
-- [ ] Add `platform_dos.c`.
-- [ ] Move current directory lookup behind `platform_getcwd`.
-- [ ] Move directory creation behind `platform_mkdir`.
-- [ ] Move file existence checks behind `platform_file_exists`.
-- [ ] Move directory checks behind `platform_is_dir`.
-- [ ] Move rename operations behind `platform_rename`.
-- [ ] Add `platform_path_sep`.
-- [ ] Add path normalization helpers.
-- [ ] Add a directory iterator API:
-  - [ ] `platform_opendir`
-  - [ ] `platform_readdir`
-  - [ ] `platform_closedir`
-- [ ] Replace direct `opendir`, `readdir`, and `closedir` usage.
-- [ ] Replace direct `getcwd`, `mkdir`, `stat`, and `rename` usage.
-- [ ] Keep POSIX behavior identical after wrapper replacement.
+- [x] Add `platform.h`.
+- [x] Add `platform_posix.c`.
+- [x] Add `platform_dos.c`.
+- [x] Move current directory lookup behind `platform_getcwd`.
+- [x] Move directory creation behind `platform_mkdir`.
+- [x] Move file existence checks behind `platform_file_exists`.
+- [x] Move directory checks behind `platform_is_dir`.
+- [x] Move rename operations behind `platform_rename`.
+- [x] Add `platform_path_sep`.
+- [x] Add path normalization helpers.
+- [x] Add a directory iterator API:
+  - [x] `platform_opendir`
+  - [x] `platform_readdir`
+  - [x] `platform_closedir`
+- [x] Replace direct `opendir`, `readdir`, and `closedir` usage.
+- [x] Replace direct `getcwd`, `mkdir`, `stat`, and `rename` usage.
+- [x] Keep POSIX behavior identical after wrapper replacement.
 
 ## Phase 4: Normalize Paths And Names
 

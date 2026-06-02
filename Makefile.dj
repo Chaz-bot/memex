@@ -13,8 +13,8 @@ EXE = memex.exe
 
 all: $(EXE)
 
-$(EXE): memex.c memex_config.h
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $(EXE) memex.c $(LIBS)
+$(EXE): memex.c memex_config.h platform.h platform_dos.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $(EXE) memex.c platform_dos.c $(LIBS)
 
 clean:
 	if exist $(EXE) del $(EXE)
