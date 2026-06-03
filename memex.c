@@ -3601,8 +3601,10 @@ static void editor_autocomplete_link(void)
     while (start + prefix_len < end
            && start[prefix_len] != '|'
            && start[prefix_len] != '#'
-           && prefix_len + 1 < (int)sizeof(prefix))
-        prefix[prefix_len++] = start[prefix_len];
+           && prefix_len + 1 < (int)sizeof(prefix)) {
+        prefix[prefix_len] = start[prefix_len];
+        prefix_len++;
+    }
     prefix[prefix_len] = '\0';
 
     if (prefix[0] == '\0') {
