@@ -263,3 +263,32 @@ c:
 Note: DOSBox-X has built-in DPMI support; `CWSDPMI.EXE` is not required when
 running under DOSBox-X. The `lfn=true` option (not `long file names=true`) is
 the correct key for the `[dos]` section.
+
+## DPMI On Bare MS-DOS 6.22
+
+MS-DOS 6.22 has no built-in DPMI provider. `memex.exe` is built with the DJGPP
+go32 v2.05 stub, which automatically loads `CWSDPMI.EXE` at startup when no
+DPMI host is detected.
+
+`CWSDPMI.EXE` (r7, 2010, C.W. Sandmann, public domain) is included in this
+repository. Place it in the same directory as `memex.exe`:
+
+```
+C:\MEMEX\
+    MEMEX.EXE
+    CWSDPMI.EXE
+```
+
+The go32 stub searches the executable's own directory before `PATH`, so no
+`PATH` change or `AUTOEXEC.BAT` entry is required.
+
+If `CWSDPMI.EXE` is missing and DOS has no DPMI provider, the stub prints:
+
+```
+DPMI not found
+```
+
+and exits without running `memex.exe`.
+
+`CWSDPMI.EXE` is not needed under DOSBox-X (built-in DPMI) or FreeDOS with
+`HDPMI32.EXE` or another DPMI server already loaded.
