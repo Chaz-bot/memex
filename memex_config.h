@@ -3,6 +3,14 @@
 
 #include <limits.h>
 
+/* MEMEX_DOS_FAT implies MEMEX_DOS_PROFILE and selects 8.3-safe filenames
+ * for bare MS-DOS 6.22 FAT16 (no long filename driver required). */
+#ifdef MEMEX_DOS_FAT
+#ifndef MEMEX_DOS_PROFILE
+#define MEMEX_DOS_PROFILE
+#endif
+#endif
+
 #ifdef MEMEX_DOS_PROFILE
 
 #define MEMEX_PATH_MAX 260

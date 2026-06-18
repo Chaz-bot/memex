@@ -29,12 +29,12 @@ DPMI (no built-in provider in DOS 6.22) and 8.3 filenames (no LFN on FAT16).
 
 ## Phase 2: New `MEMEX_DOS_FAT` Compile Flag
 
-- [ ] Add `MEMEX_DOS_FAT` to `memex_config.h`; document that it implies
+- [x] Add `MEMEX_DOS_FAT` to `memex_config.h`; document that it implies
       `MEMEX_DOS_PROFILE` and selects 8.3-safe filenames.
-- [ ] Add a `check-fat` target to `Makefile.dj` that compiles with both
+- [x] Add a `check-fat` target to `Makefile.dj` that compiles with both
       `-DMEMEX_DOS_PROFILE` and `-DMEMEX_DOS_FAT` without linking (syntax
       check only, since PDCurses is not always available on the host).
-- [ ] Confirm the Linux build ignores `MEMEX_DOS_FAT` and continues to pass
+- [x] Confirm the Linux build ignores `MEMEX_DOS_FAT` and continues to pass
       `make smoke` and `make persistence`.
 
 ## Phase 3: 8.3 Config And Special File Names

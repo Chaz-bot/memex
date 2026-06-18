@@ -24,9 +24,13 @@ check-triage: memex.c memex_config.h platform.h platform_dos.c ui_curses.h
 	$(CC) $(CFLAGS) -DMEMEX_DISABLE_SAVED_SEARCHES -DMEMEX_DISABLE_MENTIONS -DMEMEX_DISABLE_TRANSCLUSION -DMEMEX_DISABLE_MOUSE -c memex.c
 	$(CC) $(CFLAGS) -DMEMEX_DISABLE_SAVED_SEARCHES -DMEMEX_DISABLE_MENTIONS -DMEMEX_DISABLE_TRANSCLUSION -DMEMEX_DISABLE_MOUSE -c platform_dos.c
 
+check-fat: memex.c memex_config.h platform.h platform_dos.c ui_curses.h
+	$(CC) $(CFLAGS) -DMEMEX_DOS_FAT -c memex.c
+	$(CC) $(CFLAGS) -DMEMEX_DOS_FAT -c platform_dos.c
+
 clean:
 	if exist $(EXE) del $(EXE)
 	if exist memex.o del memex.o
 	if exist platform_dos.o del platform_dos.o
 
-.PHONY: all check-syntax check-triage clean
+.PHONY: all check-syntax check-triage check-fat clean
