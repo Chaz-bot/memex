@@ -156,10 +156,10 @@ illegal in 8.3. Under `MEMEX_DOS_FAT`, update the test scaffolding:
       link text in `run_smoke_tests` and `run_persistence_tests`.
 - [x] Confirm `make smoke` and `make persistence` pass with `-DMEMEX_DOS_FAT`
       on the Linux host.
-- [ ] Confirm `memex.exe --smoke-test c:\smoke` passes on the target
-      DOS 6.22 environment.
-- [ ] Confirm `memex.exe --persistence-test c:\persist` passes on the target
-      DOS 6.22 environment.
+- [x] Confirm `memex.exe --smoke-test c:\smoke` passes on the target
+      DOS 6.22 environment. Confirmed under DOSBox-X `lfn=false`.
+- [x] Confirm `memex.exe --persistence-test c:\persist` passes on the target
+      DOS 6.22 environment. Confirmed under DOSBox-X `lfn=false`.
 
 ## Phase 8: Build System
 
@@ -184,31 +184,40 @@ illegal in 8.3. Under `MEMEX_DOS_FAT`, update the test scaffolding:
       Binary starts cleanly under DOSBox-X `lfn=false` (DPMI provided by
       DOSBox-X; CWSDPMI not invoked). No `SIGILL` observed. CWSDPMI still
       needs verification on a DPMI-free environment.
-- [ ] Confirm `memex.exe --smoke-test c:\smoke` passes.
-      **Blocked: requires FAT build (`make -f Makefile.dj fat`).**
-      Non-FAT binary tested: starts, creates notes, fails at title comparison
-      because 8.3 truncation mangles filenames (`MENTIONE.MD` ≠ `Mentioner`).
+- [x] Confirm `memex.exe --smoke-test c:\smoke` passes.
+      FAT build confirmed: `smoke: PASS` under DOSBox-X 2024.03.01 `lfn=false`.
+      Three runtime bugs found and fixed during testing: (1) `find_note_by_target`
+      used case-sensitive `strcmp` for `title` but DOS readdir returns filenames
+      in a case that may not match the original title — fixed by using
+      `case_equals`; (2) `smoke_sidebar_has_title` used `strcmp` for `title`
+      with the same issue — fixed by using `case_equals` + `display_title`
+      fallback; (3) `scan_notes_recursive` used `strcmp` to exclude the trash
+      and template directories by name, but DOSBox-X local-mount readdir may
+      return directory names in different case — fixed by using `case_equals`.
       See `DOS_BUILD.md` for full findings.
-- [ ] Confirm `memex.exe --persistence-test c:\persist` passes.
-      **Blocked: requires FAT build.**
-      Non-FAT binary: creates `PERSISTE.MD` and state, fails `last_note`
-      comparison (`persiste` ≠ `Persisted`).
+- [x] Confirm `memex.exe --persistence-test c:\persist` passes.
+      FAT build confirmed: `persistence: PASS` under same environment.
+      `MXSTATE.DAT`, `MEMEXRC.CFG`, `MXDAYFMT.DAT`, `MXSRCH.DAT`, `TMPLATED.MD`,
+      `PERSISTE.MD`, `.TPL/`, and `LOG/` all created correctly.
 - [ ] Confirm interactive TUI launches and keyboard navigation works.
-      **Blocked: requires FAT build.**
+      Not yet tested. The FAT binary starts cleanly (no SIGILL). TUI requires
+      a PTY/console session; pending real-hardware or interactive DOSBox-X test.
 - [ ] Confirm create, edit, save, rename, and trash note operations work with
       8.3 filenames on the FAT filesystem.
-      **Blocked: requires FAT build.**
+      Covered functionally by smoke/persistence tests above; interactive
+      validation pending.
 - [ ] Confirm link following, backlinks, tags, outline, and search work.
-      **Blocked: requires FAT build.**
+      Covered functionally by smoke test (link follow, backlinks, tags, outline,
+      full-text search, mention detection all exercised and passing).
 - [ ] Confirm state and config persistence across restarts using the 8.3 file
       names.
-      **Blocked: requires FAT build.**
+      Covered by persistence test: state and config round-trip confirmed.
 - [ ] Confirm there are no collisions or truncation surprises at `MAX_NOTES`
       note count.
-      **Blocked: requires FAT build.**
-- [ ] Record tested DOS version, DPMI provider version, and hardware or
+      Not yet tested. Requires a performance test run on real DOS hardware.
+- [x] Record tested DOS version, DPMI provider version, and hardware or
       emulator version in `DOS_BUILD.md`.
-      **Pending: record once FAT binary is tested on target environment.**
+      Recorded in `DOS_BUILD.md` FAT runtime testing section.
 
 ## Phase 10: Documentation
 

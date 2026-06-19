@@ -1469,8 +1469,8 @@ static void scan_notes_recursive(const char *rel_dir)
         copy_string(ent_name, sizeof(ent_name), entries[i]);
         if (strcmp(ent_name, ".") == 0 || strcmp(ent_name, "..") == 0)
             continue;
-        if (strcmp(ent_name, trash_dir_name) == 0
-            || strcmp(ent_name, template_dir_name) == 0)
+        if (case_equals(ent_name, trash_dir_name)
+            || case_equals(ent_name, template_dir_name))
             continue;
         if (ent_name[0] == '.' && !has_md_suffix(ent_name))
             continue;
@@ -2391,7 +2391,7 @@ static int find_note_by_target(const char *target)
     for (i = 0; i < note_count; i++) {
         int j;
 
-        if (strcmp(notes[i].title, target) == 0
+        if (case_equals(notes[i].title, target)
             || strcmp(notes[i].display_title, target) == 0)
             return i;
         for (j = 0; j < notes[i].alias_count; j++) {
@@ -2871,8 +2871,8 @@ static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
         if (!platform_stat(child_path, &st))
             continue;
         if (st.is_dir) {
-            if (strcmp(ent_name, trash_dir_name) != 0
-                && strcmp(ent_name, template_dir_name) != 0)
+            if (!case_equals(ent_name, trash_dir_name)
+                && !case_equals(ent_name, template_dir_name))
                 rewrite_links_recursive(child_rel, old_title, new_title,
                                         old_display, new_display);
         } else if (has_md_suffix(ent_name)) {
@@ -4821,7 +4821,8 @@ static int smoke_sidebar_has_title(const char *title)
     for (i = 0; i < sidebar_item_count; i++) {
         if (sidebar_items[i].kind == SIDEBAR_KIND_NOTE
             && sidebar_items[i].note_index >= 0
-            && strcmp(notes[sidebar_items[i].note_index].title, title) == 0)
+            && (case_equals(notes[sidebar_items[i].note_index].title, title)
+                || strcmp(notes[sidebar_items[i].note_index].display_title, title) == 0))
             return 1;
     }
     return 0;
@@ -5011,6 +5012,7 @@ static int run_smoke_tests(const char *dir)
     free_view();
     free_note_indices();
     printf("smoke: PASS\n");
+    fflush(stdout);
     return 0;
 }
 
@@ -5196,6 +5198,7 @@ static int run_persistence_tests(const char *dir)
     free_view();
     free_note_indices();
     printf("persistence: PASS\n");
+    fflush(stdout);
     return 0;
 }
 
@@ -5402,6 +5405,7 @@ static int run_performance_tests(const char *dir)
     free_view();
     free_note_indices();
     printf("performance: PASS\n");
+    fflush(stdout);
     return 0;
 }
 

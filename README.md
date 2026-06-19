@@ -49,14 +49,16 @@ protected-mode DOS on a 386SX/8 MB class machine.
 ### Status
 
 The LFN build (`MEMEX_DOS_PROFILE`) is complete and confirmed in DOSBox-X.
-The FAT build (`MEMEX_DOS_FAT`) for bare MS-DOS 6.22 is source-complete;
-linking and runtime testing on a DOS 6.22 environment are pending.
+The FAT build (`MEMEX_DOS_FAT`) is complete and confirmed under DOSBox-X
+with `lfn=false`; bare MS-DOS 6.22 real-hardware / CWSDPMI testing is pending.
 
 - Platform layer, DOS memory profile, and curses compatibility layer complete.
 - Smoke, persistence, and performance tests pass on the Linux host.
 - `memex.exe` confirmed under DOSBox-X (LFN mode): smoke/persistence tests
   pass, interactive TUI launches and works.
-- `make -f Makefile.dj check-fat` passes (FAT build syntax check).
+- `memex.exe` (FAT build) confirmed under DOSBox-X `lfn=false`:
+  `smoke: PASS`, `persistence: PASS`.
+- Interactive TUI on FAT build pending (requires console session).
 
 See [DOS_BUILD.md](./DOS_BUILD.md) for build notes and confirmed environment,
 and [DOS622_TODO.md](./DOS622_TODO.md) for DOS 6.22 remaining work.
@@ -177,7 +179,12 @@ pass; interactive TUI launches and operates correctly. Compiler: GCC 14.2.0
 SIGILL; 8.3 filename truncation is active and the smoke/persistence tests fail
 as expected (confirmed need for FAT build). See `DOS_BUILD.md` for details.
 
-FAT build on bare MS-DOS 6.22: pending.
+**DOSBox-X 2024.03.01** (`lfn=false`, FAT build, `i586-pc-msdosdjgpp-gcc`
+GCC 12.2.0, PDCursesMod v4.5.4): `smoke: PASS`, `persistence: PASS`.
+State and config 8.3 filenames (`MXSTATE.DAT`, `MEMEXRC.CFG`, etc.) confirmed.
+See `DOS_BUILD.md` for full findings and three runtime bug fixes applied.
+
+Bare MS-DOS 6.22 (real hardware or DPMI-free emulator): pending.
 
 ### Known Missing or Reduced Features
 

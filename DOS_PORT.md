@@ -264,20 +264,21 @@ PDCursesMod DOS backend).
 
 ### FAT build (`MEMEX_DOS_FAT`)
 
-The source changes (Phases 1–8 of `DOS622_TODO.md`) are complete and the
-`fat` Makefile target is in place. Host checks pass:
+The source changes and `fat` Makefile target are complete. All host checks and
+DOSBox-X runtime verification pass:
 
 - `make smoke` / `make persistence` (Linux, no flags)
 - `make smoke` / `make persistence` compiled with `-DMEMEX_DOS_FAT -DMEMEX_DOS_PROFILE`
 - `make -f Makefile.dj check-fat` (syntax check with FAT flags)
+- `memex.exe --smoke-test S:\` → `smoke: PASS` (DOSBox-X 2024.03.01, `lfn=false`)
+- `memex.exe --persistence-test P:\` → `persistence: PASS` (same environment)
 
-The FAT `memex.exe` has not yet been linked or tested on DOS hardware. The
-following remain pending:
+See `DOS_BUILD.md` for the confirmed build environment (GCC 12.2.0,
+`i586-pc-msdosdjgpp-gcc`, PDCursesMod v4.5.4, `andrewwutw/build-djgpp` v3.4)
+and for three runtime bugs found and fixed during FAT testing.
 
-- Link `memex.exe` with the `fat` target against PDCurses.
-- Confirm `memex.exe --smoke-test` and `--persistence-test` pass on DOS 6.22
-  (or DOSBox-X with `lfn=false`); see `dos622-test.conf` and `runtest.bat`.
-- Confirm interactive TUI with 8.3 note filenames.
-- Confirm CWSDPMI loads on bare DOS 6.22 (no built-in DPMI).
-- Record tested DOS version, DPMI provider, and emulator/hardware in
-  `DOS_BUILD.md`.
+The following remain pending:
+
+- Confirm interactive TUI with 8.3 note filenames (requires console session).
+- Confirm CWSDPMI loads on bare MS-DOS 6.22 (no built-in DPMI).
+- Performance test (`--performance-test`) on real DOS hardware.

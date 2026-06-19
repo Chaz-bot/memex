@@ -393,17 +393,80 @@ loaded in this configuration. To test `CWSDPMI.EXE`, you need real MS-DOS 6.22
 hardware or a DPMI-free emulator. The go32 stub searches the executable's own
 directory and loads `CWSDPMI.EXE` automatically when no DPMI host is detected.
 
-### Pending: FAT binary required
+### FAT binary on LFN-disabled DOSBox-X (findings, 2026-06-19)
 
-All smoke and persistence test passes, interactive TUI verification, and
-state/config file name confirmation require the FAT build:
+Built using the `andrewwutw/build-djgpp` v3.4 pre-built Linux x86_64 tarball
+(GCC 12.2.0, `i586-pc-msdosdjgpp-gcc`) and PDCursesMod v4.5.4 DOS backend:
 
 ```sh
+export PATH="$HOME/djgpp/djgpp/bin:$PATH"
 make -f Makefile.dj fat \
-  CC=i686-pc-msdosdjgpp-gcc \
-  LIBS="/path/to/PDCursesMod/dos/pdcurses.a" \
-  CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DISABLE_MOUSE -I/path/to/PDCursesMod"
+  CC=i586-pc-msdosdjgpp-gcc \
+  LIBS="$HOME/pdcursesmod/dos/pdcurses.a" \
+  CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DOS_FAT \
+          -DMEMEX_DISABLE_MOUSE -I$HOME/pdcursesmod"
 ```
 
-Tested DOS version, DPMI provider, and emulator/hardware versions should be
-recorded here once the FAT binary is built and tested.
+Produced `memex.exe` (407 KB, DJGPP go32 DOS extender).
+
+Tested with DOSBox-X 2024.03.01, `lfn=false`, `machine=svga_s3`, `memsize=16`,
+`cycles=max`, `-date-host-forced`, mounted Linux directories as DOS drives.
+
+**Results:**
+
+- `memex.exe --smoke-test S:\` → **`smoke: PASS`**
+- `memex.exe --persistence-test P:\` → **`persistence: PASS`**
+
+Confirmed output files from smoke test:
+- `ALPHA.MD`, `TARGET.MD`, `MENTION.MD` (8.3-safe note names)
+- `PROJECTS/NESTED.MD` (nested directory)
+- `REF.MD` (link rewrite from `[[Old-Name]]` to `[[Renamed]]` confirmed)
+- `TRASH/RENAMED.MD` (trash operation confirmed)
+- `MXSTATE.DAT` (8.3 state filename confirmed)
+
+Confirmed output files from persistence test:
+- `MXSTATE.DAT`, `MEMEXRC.CFG`, `MXDAYFMT.DAT`, `MXSRCH.DAT`
+- `TMPLATED.MD` (template expansion: `# Tmplated From Template`)
+- `PERSISTE.MD` (note with `# Persisted` heading; display_title roundtrip confirmed)
+- `.TPL/` (custom template directory)
+- `LOG/` (daily note directory)
+
+**Runtime bugs found and fixed during FAT testing:**
+
+Three bugs in `memex.c` only manifest under a real DOS 8.3 environment where
+`readdir` returns filenames in a case that may differ from how the file was
+created (DOSBox-X local-mount drives fold filenames to lowercase or uppercase
+depending on the API path):
+
+1. **`find_note_by_target` case sensitivity**: The function compared `title`
+   (the 8.3 filename stem) with `strcmp`. Under DOS, readdir may return
+   `"alpha"` for a file created as `"Alpha.MD"`, causing `strcmp("alpha",
+   "Alpha")` to fail. Fixed by using `case_equals` for the `title` comparison;
+   `display_title` (set from the `# heading`) keeps the original case and is
+   still compared with `strcmp`.
+
+2. **`smoke_sidebar_has_title` case sensitivity**: Same root cause — the
+   helper compared `notes[i].title` with `strcmp`. Fixed by using `case_equals`
+   for `title` and adding a `display_title` fallback.
+
+3. **Trash and template directory exclusion in `scan_notes_recursive`**: The
+   directory-scan loop used `strcmp` to skip the trash and template directories
+   by name (`"TRASH"` vs `"trash"`, etc.). Fixed by using `case_equals` in both
+   the note scan and the link-rewrite scan.
+
+**Note on stdout capture:** DJGPP's go32 protected-mode extender does not
+inherit the DOS stdout file handle from COMMAND.COM on the first program
+invocation in a session. `printf("smoke: PASS\n")` may not appear in a `>>`
+redirect if the smoke test is the first program run. `fflush(stdout)` is called
+after each PASS print. Testing with a pre-existing redirect file or running the
+persistence test first confirms both results in the redirect file.
+
+**Note on DOS date:** Without a real-time clock sync, DOSBox-X may present an
+incorrect system date to DJGPP. The daily note filename derived from
+`strftime("%Y%m%d")` may not match the calendar date. This is a DOSBox-X
+configuration issue, not a `memex` bug. Use `-date-host-forced` to sync the
+host date.
+
+**CWSDPMI note:** DOSBox-X provides built-in DPMI; `CWSDPMI.EXE` is not loaded
+in this configuration. Testing `CWSDPMI.EXE` on bare MS-DOS 6.22 without a
+built-in DPMI host is still pending.
