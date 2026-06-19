@@ -48,108 +48,136 @@ protected-mode DOS on a 386SX/8 MB class machine.
 
 ### Status
 
-Phases 1–10 of the port are complete on the Linux host:
+The LFN build (`MEMEX_DOS_PROFILE`) is complete and confirmed in DOSBox-X.
+The FAT build (`MEMEX_DOS_FAT`) for bare MS-DOS 6.22 is source-complete;
+linking and runtime testing on a DOS 6.22 environment are pending.
 
-- Platform layer (`platform_dos.c`) isolates all filesystem and directory calls.
-- `memex_config.h` selects the DOS memory profile at compile time.
-- `ui_curses.h` centralizes curses includes and key normalization for both
-  ncurses and PDCurses.
-- Source validates with `make -f Makefile.dj check-syntax` on the Linux host.
-- Core runtime, persistence, and performance smoke tests pass on the Linux host
-  with `-DMEMEX_DOS_PROFILE`.
+- Platform layer, DOS memory profile, and curses compatibility layer complete.
+- Smoke, persistence, and performance tests pass on the Linux host.
+- `memex.exe` confirmed under DOSBox-X (LFN mode): smoke/persistence tests
+  pass, interactive TUI launches and works.
+- `make -f Makefile.dj check-fat` passes (FAT build syntax check).
 
-A full DOS binary linked against PDCurses has not yet been confirmed.
-See [DOS_BUILD.md](./DOS_BUILD.md) for phase-by-phase build notes and
-[DOS_TODO.md](./DOS_TODO.md) for remaining work.
+See [DOS_BUILD.md](./DOS_BUILD.md) for build notes and confirmed environment,
+and [DOS622_TODO.md](./DOS622_TODO.md) for DOS 6.22 remaining work.
 
 ### DOS Prerequisites
 
-- **Compiler**: DJGPP GCC 2.95 or later (32-bit protected-mode DOS toolchain).
-  For Linux-hosted cross-compilation, a DJGPP cross-compiler such as
-  `i686-pc-msdosdjgpp-gcc` works (the AUR `djgpp-gcc` package installs
-  under this name).
+- **Compiler**: DJGPP GCC (32-bit protected-mode DOS toolchain). For
+  Linux-hosted cross-compilation, `i686-pc-msdosdjgpp-gcc` works (the AUR
+  `djgpp-gcc` package installs under this name).
 - **Curses library**: PDCurses built for the same DJGPP target, with headers
-  and `libpdcurses.a` available in the compiler's search paths.
+  and `libpdcurses.a` (or `pdcurses.a` for PDCursesMod) in the search paths.
 - **DPMI provider**: required at runtime for 32-bit protected-mode execution.
-  CWSDPMI (bundled with DJGPP) is the usual choice on FreeDOS and MS-DOS.
-- **Long filename support**: required for the first port. Notes, templates,
-  and state files use names longer than 8.3 characters. Under FreeDOS, the
-  `DOSLFN` or `JLFN` TSR provides long filename support; some DPMI-aware
-  DOS environments include it by default. Without long filename support, the
-  file layer will not work correctly.
+  `CWSDPMI.EXE` (included in this repository) loads automatically from the
+  same directory as `memex.exe` when no DPMI host is present. DOSBox-X and
+  FreeDOS provide their own DPMI and do not need `CWSDPMI.EXE`.
+- **Long filename support**: required for the standard LFN build. Notes,
+  templates, and state files use names longer than 8.3 characters. Under
+  FreeDOS, the `DOSLFN` or `JLFN` TSR provides it; under DOSBox-X set
+  `lfn=true`. **Not required** with the `MEMEX_DOS_FAT` build — see below.
 - **make**: either a DJGPP-environment `make` or a DOS `make` capable of
   reading `Makefile.dj`.
 
 ### DOS Build Commands
 
-From a DJGPP environment with PDCurses installed:
+**LFN build** (long filename support required at runtime):
 
 ```bat
 make -f Makefile.dj
 ```
 
-or using the batch file:
+**FAT build** (bare MS-DOS 6.22 FAT16, no LFN needed):
+
+```bat
+make -f Makefile.dj fat
+```
+
+Or using the batch file:
 
 ```bat
 build-dos.bat
 ```
 
-For a Linux-hosted DJGPP cross-compiler, pass the compiler explicitly:
+For a Linux-hosted DJGPP cross-compiler:
 
 ```sh
 make -f Makefile.dj CC=i686-pc-msdosdjgpp-gcc
+make -f Makefile.dj fat CC=i686-pc-msdosdjgpp-gcc \
+    LIBS="/path/to/PDCursesMod/dos/pdcurses.a" \
+    CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DISABLE_MOUSE -I/path/to/PDCursesMod"
 ```
 
-To verify the source compiles without linking (useful on hosts without PDCurses
-installed):
+To verify the source compiles without linking (no PDCurses needed):
 
 ```bat
 make -f Makefile.dj check-syntax
+make -f Makefile.dj check-fat
 ```
 
-To build with all optional features disabled (saved searches, mentions,
-transclusion, and mouse):
+To build with all optional features disabled:
 
 ```bat
 make -f Makefile.dj check-triage
 ```
 
-The DOS build defines `MEMEX_DOS_PROFILE` and links against `-lpdcurses`.
-
 ### DOS Runtime Requirements
 
-- MS-DOS, FreeDOS, or a compatible emulator (DOSBox, DOSBox-X, PCem, or
-  real hardware).
-- A DPMI provider available before running `memex.exe`. CWSDPMI can be placed
-  in the same directory as the executable or on the `PATH`.
-- Long filename support active in the DOS environment.
-- A serial or PS/2 mouse driver loaded if mouse input is wanted; keyboard-only
-  operation works without a mouse driver.
+- MS-DOS 6.22+, FreeDOS, or a compatible emulator (DOSBox-X, PCem, real hardware).
+- A DPMI provider: `CWSDPMI.EXE` (included) for bare MS-DOS, or provided
+  automatically by DOSBox-X / FreeDOS.
+- **LFN build** (`MEMEX_DOS_PROFILE`): long filename support required (see above).
+- **FAT build** (`MEMEX_DOS_FAT`): no LFN needed; runs on bare MS-DOS 6.22 FAT16.
+- A serial or PS/2 mouse driver if mouse input is wanted; keyboard-only
+  works without a mouse driver.
 
-### Long Filename Requirement
+### Filename Scheme
 
-`memex` uses `.md` note files and dot-prefixed support names:
+Two builds are available, selectable at compile time:
 
-- `.memex-state` (persisted UI state)
-- `.memexrc` (configuration)
-- `.memex-searches` (saved searches)
-- `.memex-daily-format` (daily note naming pattern)
-- `.trash/` (deleted notes)
-- `.templates/` (note templates)
+**LFN build** (`make -f Makefile.dj`): requires long filename support in the
+DOS environment. Uses dot-prefixed support names:
 
-All of these exceed 8.3 filename limits. The port requires a DOS environment
-with long filename support enabled. Short-name (8.3) DOS environments are not
-supported by the first port.
+| Purpose | Filename |
+|---|---|
+| State | `.memex-state` |
+| Config | `.memexrc` |
+| Saved searches | `.memex-searches` |
+| Daily format | `.memex-daily-format` |
+| Trash | `.trash/` |
+| Templates | `.templates/` |
+
+**FAT build** (`make -f Makefile.dj fat`): runs on bare MS-DOS 6.22 FAT16
+with no LFN driver. Uses 8.3-safe names:
+
+| Purpose | Filename |
+|---|---|
+| State | `MXSTATE.DAT` |
+| Config | `MEMEXRC.CFG` |
+| Saved searches | `MXSRCH.DAT` |
+| Daily format | `MXDAYFMT.DAT` |
+| Trash | `TRASH/` |
+| Templates | `TEMPLATE/` |
+
+Note filenames in the FAT build use a sanitized title stem truncated to
+8 characters with a `.MD` extension (e.g., a note titled "Meeting Notes"
+is stored as `MEETINGN.MD`). The full title is preserved in the `# Heading`
+of each file and restored as `display_title` on load, so the application
+always shows and searches the full user title. `[[Meeting Notes]]` wiki links
+resolve correctly regardless of the underlying filename.
 
 ### Tested Environments
 
-The source has been validated with `make -f Makefile.dj check-syntax` on a
-Linux host using GCC with DJGPP-compatible defines. Smoke, persistence, and
-performance tests pass on the Linux host with `-DMEMEX_DOS_PROFILE`.
+**DOSBox-X 2024.03.01** (`machine=svga_s3`, `memsize=16`, `lfn=true`,
+`cycles=max`, LFN build): `memex.exe --smoke-test` and `--persistence-test`
+pass; interactive TUI launches and operates correctly. Compiler: GCC 14.2.0
+(`i686-pc-msdosdjgpp-gcc`), DJGPP 2.05, PDCursesMod DOS backend.
 
-A confirmed working DOS binary on real hardware or an emulator has not yet been
-recorded. This section will be updated after the first successful DOS run. The
-intended test environment is FreeDOS with CWSDPMI in DOSBox-X.
+**DOSBox-X 2024.03.01** (`lfn=false`, non-FAT binary): binary starts without
+SIGILL; 8.3 filename truncation is active and the smoke/persistence tests fail
+as expected (confirmed need for FAT build). See `DOS_BUILD.md` for details.
+
+FAT build on bare MS-DOS 6.22: pending.
 
 ### Known Missing or Reduced Features
 
@@ -219,9 +247,10 @@ console size. If function or arrow keys are not working, check whether the
 PDCurses build has `#define XCURSES` or the DOS-console backend selected, not
 the X11 or SDL variant.
 
-**Long filename errors on file create** — The long filename TSR is not active.
-Under FreeDOS, load `DOSLFN.COM` or `JLFN.COM` before running `memex.exe`.
-Under DOSBox-X, set `lfn=true` in the `[dos]` section of the configuration.
+**Long filename errors on file create** — Running the LFN build without long
+filename support. Under FreeDOS, load `DOSLFN.COM` or `JLFN.COM` first. Under
+DOSBox-X, set `lfn=true` in `[dos]`. Alternatively, use the FAT build
+(`make -f Makefile.dj fat`) which requires no LFN support.
 
 **Memory allocation failures on startup** — The DOS profile limits are
 aggressive enough for 8 MB but may need further reduction on a 4 MB machine.

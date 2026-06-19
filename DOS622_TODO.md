@@ -212,11 +212,13 @@ illegal in 8.3. Under `MEMEX_DOS_FAT`, update the test scaffolding:
 
 ## Phase 10: Documentation
 
-- [ ] Update `DOS_BUILD.md` with `MEMEX_DOS_FAT` flag, 8.3 file name table,
+- [x] Update `DOS_BUILD.md` with `MEMEX_DOS_FAT` flag, 8.3 file name table,
       and CWSDPMI bundling instructions.
-- [ ] Update `DOS_PORT.md` to describe the FAT filename scheme and the display
+      (Covered in Phases 8 and 9: FAT build section, filename mapping table,
+      CWSDPMI directory layout, and DOS 6.22 runtime testing findings.)
+- [x] Update `DOS_PORT.md` to describe the FAT filename scheme and the display
       title roundtrip.
-- [ ] Update `README.md` DOS section with DOS 6.22 requirements.
-- [ ] Note the UX implication: note filenames are stored in 8.3 format, but
+- [x] Update `README.md` DOS section with DOS 6.22 requirements.
+- [x] Note the UX implication: note filenames are stored in 8.3 format, but
       titles from `# headings` or YAML frontmatter display correctly at full
       length.

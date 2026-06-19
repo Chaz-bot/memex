@@ -10,7 +10,8 @@ using DJGPP and PDCurses, running on a 386SX/8 MB class machine.
 - Avoid scattering `#ifdef` guards across `memex.c`.
 - Express DOS-specific behavior through a small platform layer and a separate
   build target.
-- Require long filename support for the first working port.
+- Require long filename support for the first working port (`MEMEX_DOS_PROFILE`).
+- Support bare MS-DOS 6.22 FAT16 without any LFN driver via `MEMEX_DOS_FAT`.
 - Target 32-bit protected-mode DOS; defer 16-bit real-mode.
 
 ## Source Files
@@ -26,6 +27,8 @@ using DJGPP and PDCurses, running on a 386SX/8 MB class machine.
 | `Makefile` | Linux build |
 | `Makefile.dj` | DJGPP/DOS build |
 | `build-dos.bat` | DOS batch build entry point |
+| `dos622-test.conf` | DOSBox-X config for `lfn=false` runtime testing |
+| `runtest.bat` | DOS batch file to drive smoke/persistence tests |
 
 ## Platform Layer
 
@@ -124,8 +127,10 @@ arrow keys, Page Up/Down, Home, End, and mouse events.
 Paths are normalized to use `/` internally. The platform layer accepts both
 separators when building filesystem paths for DOS.
 
-Dot-prefixed support files are kept as-is since the port requires long
-filename support:
+### LFN build (`MEMEX_DOS_PROFILE` without `MEMEX_DOS_FAT`)
+
+Dot-prefixed support files are kept as-is; the port requires long filename
+support in this mode:
 
 - `.memex-state`
 - `.memexrc`
@@ -137,6 +142,44 @@ filename support:
 Note title validation in `memex.c` rejects DOS reserved device names
 (`CON`, `AUX`, `COM1`–`COM9`, `LPT1`–`LPT9`, `NUL`, `PRN`) and strips
 trailing dots and spaces to prevent filesystem errors on DOS.
+
+### 8.3 FAT build (`MEMEX_DOS_FAT`)
+
+`MEMEX_DOS_FAT` implies `MEMEX_DOS_PROFILE` and additionally replaces every
+special filename with an 8.3-legal equivalent defined in `memex_config.h`:
+
+| Purpose | LFN name | 8.3 name |
+|---|---|---|
+| State | `.memex-state` | `MXSTATE.DAT` |
+| Config | `.memexrc` | `MEMEXRC.CFG` |
+| Saved searches | `.memex-searches` | `MXSRCH.DAT` |
+| Daily format | `.memex-daily-format` | `MXDAYFMT.DAT` |
+| Trash directory | `.trash/` | `TRASH/` |
+| Template directory | `.templates/` | `TEMPLATE/` |
+| Rewrite scratch | `.memex-rewrite.tmp` | `MXRWRT.TMP` |
+
+Note filenames are sanitized and truncated to 8 characters before the `.MD`
+extension is appended. If two titles produce the same 8-char stem, `~1`
+through `~9` suffixes are tried (e.g., `MEETIN~1.MD`, `MEETIN~2.MD`) and the
+caller surfaces an error if all suffixes are exhausted.
+
+#### Display title roundtrip
+
+Under 8.3, a note titled "Meeting Notes" is stored as `MEETINGN.MD`. On
+reload, `note->title` is derived from the 8.3 filename stem (`"MEETINGN"`),
+but `note->display_title` is set from the `# Heading` written in the file
+by `write_note_template`. The heading is written using the original user input,
+not the 8.3 stem, so the full title survives the filename truncation.
+
+`find_note_by_target` checks both `title` and `display_title`, so
+`[[Meeting Notes]]` links resolve correctly even when the file on disk is
+`MEETINGN.MD`. `sanitize_rel_title` applies `sanitize_title` per `/`-separated
+path segment independently, so nested note directories each get their own 8-char
+truncation.
+
+The UX consequence is intentional: note filenames are opaque 8.3 identifiers
+on disk, but the application always shows and searches the full title from
+`# headings` or YAML `title:` frontmatter.
 
 ## Build System
 
@@ -156,18 +199,25 @@ persistence smoke tests to confirm the reduced build still works.
 ### DOS / DJGPP
 
 ```bat
-make -f Makefile.dj
+make -f Makefile.dj          (LFN build: memex.exe with MEMEX_DOS_PROFILE)
+make -f Makefile.dj fat      (FAT build: memex.exe with MEMEX_DOS_FAT)
 make -f Makefile.dj check-syntax
+make -f Makefile.dj check-fat
 make -f Makefile.dj check-triage
 ```
 
-`check-syntax` compiles without linking — useful on hosts that do not have
-PDCurses installed. `check-triage` compiles the reduced-feature build.
+`check-syntax` and `check-fat` compile without linking — useful on hosts
+that do not have PDCurses installed. `check-fat` includes `-DMEMEX_DOS_FAT`
+and is the primary syntax-validation target for the DOS 6.22 build.
+`check-triage` compiles the reduced-feature build.
 
 For a Linux-hosted DJGPP cross-compiler:
 
 ```sh
-make -f Makefile.dj CC=i586-pc-msdosdjgpp-gcc
+make -f Makefile.dj CC=i686-pc-msdosdjgpp-gcc
+make -f Makefile.dj fat CC=i686-pc-msdosdjgpp-gcc \
+    LIBS="/path/to/PDCursesMod/dos/pdcurses.a" \
+    CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DISABLE_MOUSE -I/path/to/PDCursesMod"
 ```
 
 ## Smoke Tests
@@ -199,23 +249,35 @@ measurements.
 
 ## Current Status
 
-Phases 1–11 are complete on the Linux host. The source passes:
+### LFN build (`MEMEX_DOS_PROFILE`)
 
-- `make` (Linux build, normal profile)
-- `make smoke` / `make persistence` / `make performance` (Linux host)
-- `make triage` (all feature-disable switches)
-- `make -f Makefile.dj check-syntax` (DJGPP-style syntax check, no PDCurses)
-- `make -f Makefile.dj check-triage` (triage syntax check)
+Phases 1–12 are complete. The source passes all host checks and a linked
+`memex.exe` has been confirmed under DOSBox-X with `lfn=true`:
 
-A full DOS binary linked against PDCurses has not yet been produced. The
-following remain pending until real DOS hardware or emulator testing:
+- `make` / `make smoke` / `make persistence` / `make performance` / `make triage`
+- `make -f Makefile.dj check-syntax` / `make -f Makefile.dj check-triage`
+- `memex.exe --smoke-test` and `--persistence-test` under DOSBox-X
+- Interactive TUI launches, navigates, creates, edits, saves, and renames notes
 
-- Link `memex.exe` against PDCurses in a DJGPP environment.
-- Confirm the executable starts and exits cleanly under FreeDOS/DOSBox-X.
-- Confirm arrow, page, home, and end keys under PDCurses.
-- Confirm create, edit, save, rename, trash, and reopen notes.
-- Confirm links, backlinks, tags, outline, and search at DOS-profile limits.
-- Confirm state and config persistence.
-- Confirm acceptable performance on the target hardware.
-- Confirm stable memory use across repeated open/edit/search cycles.
-- Record tested compiler, PDCurses, DPMI provider, and runtime versions.
+See `DOS_BUILD.md` for the confirmed build environment (GCC 14.2.0, DJGPP 2.05,
+PDCursesMod DOS backend).
+
+### FAT build (`MEMEX_DOS_FAT`)
+
+The source changes (Phases 1–8 of `DOS622_TODO.md`) are complete and the
+`fat` Makefile target is in place. Host checks pass:
+
+- `make smoke` / `make persistence` (Linux, no flags)
+- `make smoke` / `make persistence` compiled with `-DMEMEX_DOS_FAT -DMEMEX_DOS_PROFILE`
+- `make -f Makefile.dj check-fat` (syntax check with FAT flags)
+
+The FAT `memex.exe` has not yet been linked or tested on DOS hardware. The
+following remain pending:
+
+- Link `memex.exe` with the `fat` target against PDCurses.
+- Confirm `memex.exe --smoke-test` and `--persistence-test` pass on DOS 6.22
+  (or DOSBox-X with `lfn=false`); see `dos622-test.conf` and `runtest.bat`.
+- Confirm interactive TUI with 8.3 note filenames.
+- Confirm CWSDPMI loads on bare DOS 6.22 (no built-in DPMI).
+- Record tested DOS version, DPMI provider, and emulator/hardware in
+  `DOS_BUILD.md`.
