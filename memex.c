@@ -2597,7 +2597,17 @@ static int create_note_with_template(const char *title, const char *template_nam
         set_status("Could not create note");
         return 0;
     }
-    strip_md_suffix(path_basename(rel_path), leaf, sizeof(leaf));
+    /* Use the original title's last segment as the heading so that
+     * display_title round-trips correctly even when the filename is 8.3-truncated. */
+    {
+        const char *orig_leaf = strrchr(title, '/');
+        orig_leaf = orig_leaf ? orig_leaf + 1 : title;
+        while (isspace((unsigned char)*orig_leaf))
+            orig_leaf++;
+        copy_string(leaf, sizeof(leaf), orig_leaf);
+        if (leaf[0] == '\0')
+            strip_md_suffix(path_basename(rel_path), leaf, sizeof(leaf));
+    }
     make_template_path(template_path, sizeof(template_path),
                        template_name ? template_name : DEFAULT_TEMPLATE);
     write_note_template(fp, leaf, template_path);
@@ -2726,7 +2736,8 @@ static void delete_current_note(void)
 }
 
 static int rewrite_file_links(const char *file_name, const char *old_title,
-                              const char *new_title)
+                              const char *new_title,
+                              const char *old_display, const char *new_display)
 {
     char path[MEMEX_PATH_MAX];
     char temp_path[MEMEX_PATH_MAX];
@@ -2782,6 +2793,11 @@ static int rewrite_file_links(const char *file_name, const char *old_title,
             if (strcmp(target, old_title) == 0) {
                 append_string(rewritten, sizeof(rewritten), new_title);
                 changed = 1;
+            } else if (old_display[0] && strcmp(old_display, old_title) != 0
+                       && strcmp(target, old_display) == 0) {
+                append_string(rewritten, sizeof(rewritten),
+                              new_display[0] ? new_display : new_title);
+                changed = 1;
             } else {
                 append_string(rewritten, sizeof(rewritten), target);
             }
@@ -2824,7 +2840,8 @@ static int rewrite_file_links(const char *file_name, const char *old_title,
 }
 
 static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
-                                    const char *new_title)
+                                    const char *new_title,
+                                    const char *old_display, const char *new_display)
 {
     char path[MEMEX_PATH_MAX];
     PlatformDir *dir;
@@ -2856,17 +2873,20 @@ static void rewrite_links_recursive(const char *rel_dir, const char *old_title,
         if (st.is_dir) {
             if (strcmp(ent_name, trash_dir_name) != 0
                 && strcmp(ent_name, template_dir_name) != 0)
-                rewrite_links_recursive(child_rel, old_title, new_title);
+                rewrite_links_recursive(child_rel, old_title, new_title,
+                                        old_display, new_display);
         } else if (has_md_suffix(ent_name)) {
-            rewrite_file_links(child_rel, old_title, new_title);
+            rewrite_file_links(child_rel, old_title, new_title,
+                               old_display, new_display);
         }
     }
     platform_closedir(dir);
 }
 
-static void rewrite_links_for_rename(const char *old_title, const char *new_title)
+static void rewrite_links_for_rename(const char *old_title, const char *new_title,
+                                     const char *old_display, const char *new_display)
 {
-    rewrite_links_recursive("", old_title, new_title);
+    rewrite_links_recursive("", old_title, new_title, old_display, new_display);
 }
 
 static void rename_current_note(void)
@@ -2879,6 +2899,8 @@ static void rename_current_note(void)
     char new_title[MEMEX_PATH_MAX];
     char old_path[MEMEX_PATH_MAX], new_path[MEMEX_PATH_MAX];
     char old_title[MAX_TITLE];
+    char old_display[MAX_TITLE];
+    char new_display[MAX_TITLE];
     FILE *fp;
     char *last_sep;
 
@@ -2928,11 +2950,21 @@ static void rename_current_note(void)
         return;
     }
     copy_string(old_title, sizeof(old_title), notes[current_note].title);
+    copy_string(old_display, sizeof(old_display), notes[current_note].display_title);
+    {
+        const char *orig_leaf = strrchr(title, '/');
+        orig_leaf = orig_leaf ? orig_leaf + 1 : title;
+        while (isspace((unsigned char)*orig_leaf))
+            orig_leaf++;
+        copy_string(new_display, sizeof(new_display), orig_leaf);
+        if (new_display[0] == '\0')
+            copy_string(new_display, sizeof(new_display), new_title);
+    }
     if (!platform_rename(old_path, new_path)) {
         set_status("Could not rename note");
         return;
     }
-    rewrite_links_for_rename(old_title, new_title);
+    rewrite_links_for_rename(old_title, new_title, old_display, new_display);
     load_notes();
     set_status("Note renamed and links updated");
     {
@@ -3864,7 +3896,7 @@ static void editor_autocomplete_link(void)
 
     copy_string(autocomplete_prefix, sizeof(autocomplete_prefix), prefix);
     autocomplete_last_match = match;
-    copy_string(replacement, sizeof(replacement), notes[match].title);
+    copy_string(replacement, sizeof(replacement), notes[match].display_title);
     if ((int)(strlen(line) - prefix_len + strlen(replacement)) >= MAX_LINE) {
         set_status("Completed link would exceed line limit");
         return;
@@ -4936,7 +4968,7 @@ static int run_smoke_tests(const char *dir)
     make_path(new_path, sizeof(new_path), "Renamed Note.md");
     if (!smoke_expect(platform_rename(old_path, new_path), "could not rename note file"))
         return 1;
-    rewrite_links_for_rename("Old Name", "Renamed Note");
+    rewrite_links_for_rename("Old Name", "Renamed Note", "Old Name", "Renamed Note");
     load_notes();
     renamed_idx = find_note_by_target("Renamed Note");
     if (!smoke_expect(renamed_idx >= 0, "renamed note was not loaded"))

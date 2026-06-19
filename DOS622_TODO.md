@@ -118,15 +118,27 @@ similar). On reload, `note->title` is derived from the filename stem and
 existing `find_note_by_target` checks both fields, so `[[Meeting Notes]]` will
 resolve correctly. Verify the following hold under `MEMEX_DOS_FAT`:
 
-- [ ] `write_note_template` writes a `# Title` heading for every new note so
+- [x] `write_note_template` writes a `# Title` heading for every new note so
       `display_title` survives the 8.3 stem on the next load.
-- [ ] `find_note_by_target` resolves `[[Full Title]]` links for notes stored
-      under truncated 8.3 filenames.
-- [ ] Rename link rewriting rewrites `[[Old Full Title]]` to
+      `create_note_with_template` now derives the heading from the original
+      title input's last segment rather than the sanitized 8.3 stem.
+- [x] `find_note_by_target` resolves `[[Full Title]]` links for notes stored
+      under truncated 8.3 filenames. It already checks both `title` (stem)
+      and `display_title`; with the heading fix above, `display_title` is
+      set to the full user title on the first load.
+- [x] Rename link rewriting rewrites `[[Old Full Title]]` to
       `[[New Full Title]]` correctly even when the underlying filenames are
-      8.3-truncated.
-- [ ] The title filter and full-text search operate on `display_title` and
+      8.3-truncated. `rewrite_file_links` now takes `old_display`/`new_display`
+      params and matches links written with the full display title in addition
+      to the filename stem. `rename_current_note` derives `new_display` from
+      the user's rename input and passes both pairs to `rewrite_links_for_rename`.
+      Autocomplete now inserts `display_title` as the link text so links use
+      the full user title rather than the 8.3 stem.
+- [x] The title filter and full-text search operate on `display_title` and
       `rel_path`, not the 8.3 stem, so long titles remain searchable.
+      The filter already checks `title`, `display_title`, and `rel_path`
+      (line 417-419); full-text search scans file content which includes
+      the `# heading` written with the full title.
 
 ## Phase 7: Update Smoke And Persistence Tests
 
