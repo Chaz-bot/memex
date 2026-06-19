@@ -73,26 +73,26 @@ Note filenames are produced by `sanitize_title()` (`memex.c:701`) and
 
 Under `MEMEX_DOS_FAT`, after the existing character substitutions:
 
-- [ ] Replace spaces with `_`.
-- [ ] Strip or replace additional 8.3-illegal characters: `+`, `=`, `,`,
+- [x] Replace spaces with `_`.
+- [x] Strip or replace additional 8.3-illegal characters: `+`, `=`, `,`,
       `[`, `]`, `;`, `@`, `!`, `#`, `$`, `%`, `^`, `&`, `(`, `)`.
       (Keep `-` and `_` as they are valid in 8.3.)
-- [ ] Truncate the result to 8 characters.
-- [ ] Re-run the trailing-dot/space strip after truncation.
-- [ ] Re-run the empty-title and reserved-name checks after truncation.
+- [x] Truncate the result to 8 characters.
+- [x] Re-run the trailing-dot/space strip after truncation.
+- [x] Re-run the empty-title and reserved-name checks after truncation.
 
 ### title_to_file (collision deduplication)
 
 Two distinct titles can produce the same 8-char stem. `title_to_file` must
 avoid creating a note whose filename already exists:
 
-- [ ] After building the candidate `NAME.MD`, check whether the file exists
+- [x] After building the candidate `NAME.MD`, check whether the file exists
       in the note directory using `platform_file_exists`.
-- [ ] If it exists, try `NAME~1.MD`, `NAME~2.MD`, … `NAME~9.MD` (truncate
-      the base to 7 chars to make room for the `~N` suffix if needed).
-- [ ] If all suffixes are taken, return an error so the caller can surface
+- [x] If it exists, try `NAME~1.MD`, `NAME~2.MD`, … `NAME~9.MD` (truncate
+      the base to 6 chars to make room for the `~N` suffix).
+- [x] If all suffixes are taken, return an error so the caller can surface
       a message to the user.
-- [ ] Apply the same deduplication in the rename path (`memex.c` around the
+- [x] Apply the same deduplication in the rename path (`memex.c` around the
       call that derives the new filename from the renamed title).
 
 ## Phase 5: Nested Note Directory Names

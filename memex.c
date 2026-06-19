@@ -723,15 +723,88 @@ static void sanitize_title(const char *src, char *title, size_t title_size)
         copy_string(title, title_size, "Untitled");
     if (is_dos_reserved_name(title))
         append_string(title, title_size, "-note");
+#ifdef MEMEX_DOS_FAT
+    {
+        size_t j, k = 0;
+        char fat[9];
+        for (j = 0; title[j] && k < 8; j++) {
+            c = title[j];
+            if (c == ' ') {
+                fat[k++] = '_';
+            } else if (c == '+' || c == '=' || c == ',' || c == '['
+                    || c == ']' || c == ';' || c == '@' || c == '!'
+                    || c == '#' || c == '$' || c == '%' || c == '^'
+                    || c == '&' || c == '(' || c == ')') {
+                /* skip — illegal in 8.3 filenames */
+            } else {
+                fat[k++] = c;
+            }
+        }
+        fat[k] = '\0';
+        while (k > 0 && (isspace((unsigned char)fat[k - 1]) || fat[k - 1] == '.'))
+            fat[--k] = '\0';
+        if (fat[0] == '\0')
+            copy_string(title, title_size, "Untitled");
+        else
+            copy_string(title, title_size, fat);
+        if (is_dos_reserved_name(title))
+            append_string(title, title_size, "_");
+    }
+#endif
 }
 
-static void title_to_file(const char *title, char *file, size_t file_size)
+/* dir_rel: relative subdirectory within note_dir where the note will live
+ * (empty string for the root note dir).  Under MEMEX_DOS_FAT, tries ~N
+ * suffixes 1–9 to avoid filename collisions.  Returns 1 on success, 0 if
+ * all nine slots are already taken. */
+static int title_to_file(const char *title, const char *dir_rel,
+                         char *file, size_t file_size)
 {
-    char clean[MAX_TITLE];
+    char stem[MAX_TITLE];
 
-    sanitize_title(title, clean, sizeof(clean));
-    copy_string(file, file_size, clean);
+    sanitize_title(title, stem, sizeof(stem));
+#ifdef MEMEX_DOS_FAT
+    {
+        char candidate[MAX_TITLE];
+        char full_dir[MEMEX_PATH_MAX];
+        char full_path[MEMEX_PATH_MAX];
+        char stem6[7]; /* 6 chars + NUL — leaves room for ~N (2 chars) */
+        int i;
+
+        if (dir_rel[0])
+            make_path(full_dir, sizeof(full_dir), dir_rel);
+        else
+            copy_string(full_dir, sizeof(full_dir), note_dir);
+
+        copy_string(candidate, sizeof(candidate), stem);
+        append_string(candidate, sizeof(candidate), ".MD");
+        copy_string(full_path, sizeof(full_path), full_dir);
+        append_platform_path_part(full_path, sizeof(full_path), candidate);
+        if (!platform_file_exists(full_path)) {
+            copy_string(file, file_size, candidate);
+            return 1;
+        }
+
+        copy_string(stem6, sizeof(stem6), stem); /* truncates to max 6 chars */
+        for (i = 1; i <= 9; i++) {
+            char suffix[6];
+            sprintf(suffix, "~%d.MD", i);
+            copy_string(candidate, sizeof(candidate), stem6);
+            append_string(candidate, sizeof(candidate), suffix);
+            copy_string(full_path, sizeof(full_path), full_dir);
+            append_platform_path_part(full_path, sizeof(full_path), candidate);
+            if (!platform_file_exists(full_path)) {
+                copy_string(file, file_size, candidate);
+                return 1;
+            }
+        }
+        return 0;
+    }
+#else
+    copy_string(file, file_size, stem);
     append_string(file, file_size, ".md");
+    return 1;
+#endif
 }
 
 static void split_rel_path(const char *rel_path, char *dir_path, size_t dir_size,
@@ -2473,17 +2546,39 @@ static void write_note_template(FILE *out, const char *title, const char *templa
 static int create_note_with_template(const char *title, const char *template_name)
 {
     char clean[MEMEX_PATH_MAX];
+    char dir_rel[MEMEX_PATH_MAX];
+    char leaf_file[MAX_TITLE];
     char rel_path[MEMEX_PATH_MAX];
     char path[MEMEX_PATH_MAX];
     char template_path[MEMEX_PATH_MAX];
     char leaf[MAX_TITLE];
     FILE *fp;
+    char *last_sep;
 
     sanitize_rel_title(title, clean, sizeof(clean));
     if (clean[0] == '\0')
         copy_string(clean, sizeof(clean), "Untitled");
-    copy_string(rel_path, sizeof(rel_path), clean);
-    append_string(rel_path, sizeof(rel_path), ".md");
+
+    last_sep = strrchr(clean, '/');
+    if (last_sep) {
+        size_t dir_len = (size_t)(last_sep - clean);
+        memcpy(dir_rel, clean, dir_len);
+        dir_rel[dir_len] = '\0';
+    } else {
+        dir_rel[0] = '\0';
+    }
+    if (!title_to_file(last_sep ? last_sep + 1 : clean, dir_rel,
+                       leaf_file, sizeof(leaf_file))) {
+        set_status("Too many notes with similar name");
+        return 0;
+    }
+    if (dir_rel[0]) {
+        copy_string(rel_path, sizeof(rel_path), dir_rel);
+        append_string(rel_path, sizeof(rel_path), "/");
+        append_string(rel_path, sizeof(rel_path), leaf_file);
+    } else {
+        copy_string(rel_path, sizeof(rel_path), leaf_file);
+    }
     make_path(path, sizeof(path), rel_path);
 
     fp = fopen(path, "r");
@@ -2778,10 +2873,14 @@ static void rename_current_note(void)
 {
     char title[MEMEX_PATH_MAX];
     char clean[MEMEX_PATH_MAX];
+    char dir_rel[MEMEX_PATH_MAX];
+    char leaf_file[MAX_TITLE];
     char file[MEMEX_PATH_MAX];
+    char new_title[MEMEX_PATH_MAX];
     char old_path[MEMEX_PATH_MAX], new_path[MEMEX_PATH_MAX];
     char old_title[MAX_TITLE];
     FILE *fp;
+    char *last_sep;
 
     if (current_note < 0)
         return;
@@ -2791,8 +2890,29 @@ static void rename_current_note(void)
     if (!prompt_text("Rename: ", title, sizeof(title)))
         return;
     sanitize_rel_title(title, clean, sizeof(clean));
-    copy_string(file, sizeof(file), clean);
-    append_string(file, sizeof(file), ".md");
+
+    last_sep = strrchr(clean, '/');
+    if (last_sep) {
+        size_t dir_len = (size_t)(last_sep - clean);
+        memcpy(dir_rel, clean, dir_len);
+        dir_rel[dir_len] = '\0';
+    } else {
+        dir_rel[0] = '\0';
+    }
+    if (!title_to_file(last_sep ? last_sep + 1 : clean, dir_rel,
+                       leaf_file, sizeof(leaf_file))) {
+        set_status("Too many notes with similar name");
+        return;
+    }
+    if (dir_rel[0]) {
+        copy_string(file, sizeof(file), dir_rel);
+        append_string(file, sizeof(file), "/");
+        append_string(file, sizeof(file), leaf_file);
+    } else {
+        copy_string(file, sizeof(file), leaf_file);
+    }
+    strip_md_suffix(file, new_title, sizeof(new_title));
+
     make_path(old_path, sizeof(old_path), notes[current_note].file);
     make_path(new_path, sizeof(new_path), file);
     if (strcmp(old_path, new_path) == 0)
@@ -2812,14 +2932,14 @@ static void rename_current_note(void)
         set_status("Could not rename note");
         return;
     }
-    rewrite_links_for_rename(old_title, clean);
+    rewrite_links_for_rename(old_title, new_title);
     load_notes();
     set_status("Note renamed and links updated");
     {
         int i;
 
         for (i = 0; i < note_count; i++) {
-            if (strcmp(notes[i].title, clean) == 0) {
+            if (strcmp(notes[i].title, new_title) == 0) {
                 load_note_view(i);
                 break;
             }
