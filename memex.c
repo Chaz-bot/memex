@@ -1901,7 +1901,7 @@ static void save_state(void)
     fprintf(fp, "theme=%s\n", theme_name);
     fprintf(fp, "active_tag=%s\n", active_tag);
     fprintf(fp, "last_note=%s\n",
-            current_note >= 0 ? notes[current_note].title : last_open_title);
+            current_note >= 0 ? notes[current_note].display_title : last_open_title);
     fclose(fp);
 }
 
@@ -2377,7 +2377,7 @@ static void load_note_view(int idx)
     }
     fclose(fp);
 
-    copy_string(last_open_title, sizeof(last_open_title), notes[idx].title);
+    copy_string(last_open_title, sizeof(last_open_title), notes[idx].display_title);
     add_recent_note(idx);
     build_sidebar();
     selected_note = visible_position_for_note(idx);
@@ -4864,6 +4864,25 @@ static int run_smoke_tests(const char *dir)
     int target_idx;
     int mention_idx;
     int renamed_idx;
+#ifdef MEMEX_DOS_FAT
+    const char *mention_name = "Mention";
+    const char *mention_file = "Mention.MD";
+    const char *old_name     = "Old-Name";
+    const char *old_name_file = "Old-Name.MD";
+    const char *renamed_name = "Renamed";
+    const char *renamed_file = "Renamed.MD";
+    const char *old_name_link = "[[Old-Name]]\n";
+    const char *renamed_link  = "[[Renamed]]";
+#else
+    const char *mention_name = "Mentioner";
+    const char *mention_file = "Mentioner.md";
+    const char *old_name     = "Old Name";
+    const char *old_name_file = "Old Name.md";
+    const char *renamed_name = "Renamed Note";
+    const char *renamed_file = "Renamed Note.md";
+    const char *old_name_link = "[[Old Name]]\n";
+    const char *renamed_link  = "[[Renamed Note]]";
+#endif
 
     copy_string(note_dir, sizeof(note_dir), dir);
     strip_trailing_platform_seps(note_dir);
@@ -4891,7 +4910,7 @@ static int run_smoke_tests(const char *dir)
                                            "[[Target]] [[Target|Alias]] [[Target#Section]]\n"),
                       "could not edit and save Alpha"))
         return 1;
-    if (!smoke_expect(smoke_write_rel_file("Mentioner.md",
+    if (!smoke_expect(smoke_write_rel_file(mention_file,
                                            "This note mentions Target without linking it.\n"),
                       "could not create mention smoke note"))
         return 1;
@@ -4899,7 +4918,7 @@ static int run_smoke_tests(const char *dir)
     load_notes();
     alpha_idx = find_note_by_target("Alpha");
     target_idx = find_note_by_target("Target");
-    mention_idx = find_note_by_target("Mentioner");
+    mention_idx = find_note_by_target(mention_name);
     if (!smoke_expect(alpha_idx >= 0, "could not reopen Alpha"))
         return 1;
     if (!smoke_expect(target_idx >= 0, "could not reopen Target"))
@@ -4959,32 +4978,32 @@ static int run_smoke_tests(const char *dir)
     if (!smoke_expect(current_panel == PANEL_COMMANDS, "command palette panel did not open"))
         return 1;
 
-    if (!smoke_expect(create_note("Old Name"), "could not create note to rename"))
+    if (!smoke_expect(create_note(old_name), "could not create note to rename"))
         return 1;
-    if (!smoke_expect(smoke_write_rel_file("Ref.md", "[[Old Name]]\n"),
+    if (!smoke_expect(smoke_write_rel_file("Ref.md", old_name_link),
                       "could not create rename reference"))
         return 1;
-    make_path(old_path, sizeof(old_path), "Old Name.md");
-    make_path(new_path, sizeof(new_path), "Renamed Note.md");
+    make_path(old_path, sizeof(old_path), old_name_file);
+    make_path(new_path, sizeof(new_path), renamed_file);
     if (!smoke_expect(platform_rename(old_path, new_path), "could not rename note file"))
         return 1;
-    rewrite_links_for_rename("Old Name", "Renamed Note", "Old Name", "Renamed Note");
+    rewrite_links_for_rename(old_name, renamed_name, old_name, renamed_name);
     load_notes();
-    renamed_idx = find_note_by_target("Renamed Note");
+    renamed_idx = find_note_by_target(renamed_name);
     if (!smoke_expect(renamed_idx >= 0, "renamed note was not loaded"))
         return 1;
-    if (!smoke_expect(smoke_file_contains_rel("Ref.md", "[[Renamed Note]]"),
+    if (!smoke_expect(smoke_file_contains_rel("Ref.md", renamed_link),
                       "rename did not update inbound link"))
         return 1;
 
     current_note = renamed_idx;
     delete_current_note();
     load_notes();
-    if (!smoke_expect(find_note_by_target("Renamed Note") < 0,
+    if (!smoke_expect(find_note_by_target(renamed_name) < 0,
                       "trashed note still appears in note list"))
         return 1;
     make_special_path(trash_path, sizeof(trash_path), trash_dir_name);
-    append_platform_path_part(trash_path, sizeof(trash_path), "Renamed Note.md");
+    append_platform_path_part(trash_path, sizeof(trash_path), renamed_file);
     if (!smoke_expect(platform_file_exists(trash_path), "trashed note file missing"))
         return 1;
 
@@ -5035,6 +5054,15 @@ static int run_persistence_tests(const char *dir)
     struct tm *tm_now;
     FILE *fp;
     int idx;
+#ifdef MEMEX_DOS_FAT
+    const char *tmpl_name    = "Tmplated";
+    const char *tmpl_file    = "Tmplated.MD";
+    const char *tmpl_heading = "# Tmplated From Template";
+#else
+    const char *tmpl_name    = "Templated";
+    const char *tmpl_file    = "Templated.md";
+    const char *tmpl_heading = "# Templated From Template";
+#endif
 
     copy_string(note_dir, sizeof(note_dir), dir);
     strip_trailing_platform_seps(note_dir);
@@ -5138,10 +5166,10 @@ static int run_persistence_tests(const char *dir)
         return smoke_fail("could not write default template");
     fputs("# {{title}} From Template\n\nphase8-template\n", fp);
     fclose(fp);
-    if (!smoke_expect(create_note_with_template("Templated", DEFAULT_TEMPLATE),
+    if (!smoke_expect(create_note_with_template(tmpl_name, DEFAULT_TEMPLATE),
                       "could not create templated note"))
         return 1;
-    if (!smoke_expect(smoke_file_contains_rel("Templated.md", "# Templated From Template"),
+    if (!smoke_expect(smoke_file_contains_rel(tmpl_file, tmpl_heading),
                       "template title replacement failed"))
         return 1;
 
@@ -5380,7 +5408,6 @@ static int run_performance_tests(const char *dir)
 int main(int argc, char **argv)
 {
     int ch;
-    int i;
 
     if (!platform_init()) {
         fprintf(stderr, "memex: could not initialize platform\n");
@@ -5449,12 +5476,10 @@ int main(int argc, char **argv)
     }
 
     if (!startup_applied && last_open_title[0]) {
-        for (i = 0; i < note_count; i++) {
-            if (strcmp(notes[i].title, last_open_title) == 0) {
-                load_note_view(i);
-                startup_applied = 1;
-                break;
-            }
+        int restore_idx = find_note_by_target(last_open_title);
+        if (restore_idx >= 0) {
+            load_note_view(restore_idx);
+            startup_applied = 1;
         }
     }
 

@@ -152,9 +152,9 @@ illegal in 8.3. Under `MEMEX_DOS_FAT`, update the test scaffolding:
 | `Mentioner` | 9 chars | `Mention` |
 | `Templated` | 9 chars | `Tmplated` |
 
-- [ ] Add `#ifdef MEMEX_DOS_FAT` variants of affected test note names and
+- [x] Add `#ifdef MEMEX_DOS_FAT` variants of affected test note names and
       link text in `run_smoke_tests` and `run_persistence_tests`.
-- [ ] Confirm `make smoke` and `make persistence` pass with `-DMEMEX_DOS_FAT`
+- [x] Confirm `make smoke` and `make persistence` pass with `-DMEMEX_DOS_FAT`
       on the Linux host.
 - [ ] Confirm `memex.exe --smoke-test c:\smoke` passes on the target
       DOS 6.22 environment.
