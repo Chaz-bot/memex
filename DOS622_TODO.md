@@ -101,10 +101,14 @@ avoid creating a note whose filename already exists:
 path segment, so the Phase 4 changes propagate to nested notes automatically.
 Verify explicitly:
 
-- [ ] A note title containing `/` as a nesting separator still splits into
+- [x] A note title containing `/` as a nesting separator still splits into
       segments before truncation (each segment ≤ 8 chars independently).
-- [ ] Nested note directories created by `ensure_parent_dirs` (`memex.c:2389`)
-      are themselves 8.3-legal after sanitization.
+      `sanitize_rel_title` nulls out at each `/` and calls `sanitize_title`
+      per segment, so the Phase 4 truncation applies independently per segment.
+- [x] Nested note directories created by `ensure_parent_dirs` (`memex.c:2472`)
+      are themselves 8.3-legal after sanitization. `ensure_parent_dirs`
+      receives an already-sanitized `rel_path` and calls `platform_mkdir` on
+      each path prefix without re-sanitizing.
 
 ## Phase 6: Display Title Roundtrip
 
