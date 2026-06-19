@@ -341,3 +341,69 @@ titles produce the same 8-char stem, `~1` through `~9` suffixes are tried
 `# Heading` in each note file and restored as `display_title` on load, so
 link resolution and search operate on the full title regardless of what the
 filename looks like on disk.
+
+## DOS 6.22 Runtime Testing
+
+### Test harness
+
+`dos622-test.conf` and `runtest.bat` are included in the repository root.
+Edit the mount paths in `dos622-test.conf` and run:
+
+```sh
+dosbox-x -conf dos622-test.conf -silent -exit
+```
+
+Or, from a real DOS 6.22 prompt with the repo files on `C:` and scratch
+directories on `S:` and `P:`:
+
+```bat
+RUNTEST
+```
+
+### Non-FAT binary on LFN-disabled DOSBox-X (findings, 2026-06-19)
+
+Tested with DOSBox-X 2024.03.01, `lfn=false`, `machine=svga_s3`, `memsize=16`,
+`cycles=max`, and the existing (non-FAT) `memex.exe` to document the problem
+the FAT build is intended to solve.
+
+**Observed:**
+
+- Binary starts without `SIGILL` or DPMI errors. DOSBox-X provides its own
+  DPMI host so `CWSDPMI.EXE` is not invoked in this configuration.
+- 8.3 truncation is active for all filenames created by the non-FAT binary:
+  `Mentioner.md` → `MENTIONE.MD`, `Persisted.md` → `PERSISTE.MD`.
+- Nested note directory `PROJECTS/` is created correctly.
+- State file `.memex-state` is created under a DOSBox-X 8.3-mapped name
+  instead of the expected `MXSTATE.DAT` (the FAT build uses `MXSTATE.DAT`).
+- Non-FAT smoke test fails at the first title comparison after file creation:
+  `find_note_by_target("Mentioner")` returns -1 because the file on disk is
+  `MENTIONE.MD` and the non-FAT binary's note title is derived from the
+  8.3 stem `"MENTIONE"`, not `"Mentioner"`.
+- Non-FAT persistence test saves `last_note=persiste` (8.3 stem of `Persisted`)
+  which fails the `strcmp(last_open_title, "Persisted") == 0` check.
+
+These failures confirm exactly the behaviour `MEMEX_DOS_FAT` is designed to
+fix. With the FAT build:
+- All note titles are pre-sanitized to ≤ 8 chars before file creation, so
+  `title` and display_title comparisons stay in sync.
+- Config and state files use the 8.3 names defined in `memex_config.h`.
+
+**CWSDPMI note:** DOSBox-X provides built-in DPMI so `CWSDPMI.EXE` is never
+loaded in this configuration. To test `CWSDPMI.EXE`, you need real MS-DOS 6.22
+hardware or a DPMI-free emulator. The go32 stub searches the executable's own
+directory and loads `CWSDPMI.EXE` automatically when no DPMI host is detected.
+
+### Pending: FAT binary required
+
+All smoke and persistence test passes, interactive TUI verification, and
+state/config file name confirmation require the FAT build:
+
+```sh
+make -f Makefile.dj fat \
+  CC=i686-pc-msdosdjgpp-gcc \
+  LIBS="/path/to/PDCursesMod/dos/pdcurses.a" \
+  CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DISABLE_MOUSE -I/path/to/PDCursesMod"
+```
+
+Tested DOS version, DPMI provider, and emulator/hardware versions should be
+recorded here once the FAT binary is built and tested.

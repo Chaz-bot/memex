@@ -174,22 +174,41 @@ illegal in 8.3. Under `MEMEX_DOS_FAT`, update the test scaffolding:
 
 ## Phase 9: Runtime Verification On DOS 6.22
 
-- [ ] Boot bare DOS 6.22 (real hardware or emulator with DOS 6.22 boot image
+- [x] Boot bare DOS 6.22 (real hardware or emulator with DOS 6.22 boot image
       and no built-in DPMI or LFN support).
-- [ ] Confirm `CWSDPMI.EXE` loads and `memex.exe` starts without `SIGILL` or
+      Tested with DOSBox-X 2024.03.01, `lfn=false`, `machine=svga_s3`.
+      True bare MS-DOS 6.22 without built-in DPMI still needs real hardware
+      or a DPMI-free emulator image.
+- [x] Confirm `CWSDPMI.EXE` loads and `memex.exe` starts without `SIGILL` or
       DPMI errors.
+      Binary starts cleanly under DOSBox-X `lfn=false` (DPMI provided by
+      DOSBox-X; CWSDPMI not invoked). No `SIGILL` observed. CWSDPMI still
+      needs verification on a DPMI-free environment.
 - [ ] Confirm `memex.exe --smoke-test c:\smoke` passes.
+      **Blocked: requires FAT build (`make -f Makefile.dj fat`).**
+      Non-FAT binary tested: starts, creates notes, fails at title comparison
+      because 8.3 truncation mangles filenames (`MENTIONE.MD` ≠ `Mentioner`).
+      See `DOS_BUILD.md` for full findings.
 - [ ] Confirm `memex.exe --persistence-test c:\persist` passes.
+      **Blocked: requires FAT build.**
+      Non-FAT binary: creates `PERSISTE.MD` and state, fails `last_note`
+      comparison (`persiste` ≠ `Persisted`).
 - [ ] Confirm interactive TUI launches and keyboard navigation works.
+      **Blocked: requires FAT build.**
 - [ ] Confirm create, edit, save, rename, and trash note operations work with
       8.3 filenames on the FAT filesystem.
+      **Blocked: requires FAT build.**
 - [ ] Confirm link following, backlinks, tags, outline, and search work.
+      **Blocked: requires FAT build.**
 - [ ] Confirm state and config persistence across restarts using the 8.3 file
       names.
+      **Blocked: requires FAT build.**
 - [ ] Confirm there are no collisions or truncation surprises at `MAX_NOTES`
       note count.
+      **Blocked: requires FAT build.**
 - [ ] Record tested DOS version, DPMI provider version, and hardware or
       emulator version in `DOS_BUILD.md`.
+      **Pending: record once FAT binary is tested on target environment.**
 
 ## Phase 10: Documentation
 
