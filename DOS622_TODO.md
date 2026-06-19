@@ -55,13 +55,13 @@ All current special file names use leading dots or exceed 8.3 limits. Under
 `DEFAULT_TEMPLATE` (`default.md`) and `DAILY_TEMPLATE` (`daily.md`) are
 already 8.3-legal and need no change.
 
-- [ ] Add `#ifdef MEMEX_DOS_FAT` block to `memex_config.h` with the above
+- [x] Add `#ifdef MEMEX_DOS_FAT` block to `memex_config.h` with the above
       8.3 values.
-- [ ] Add `REWRITE_TMP_FILE` constant for both profiles (`.memex-rewrite.tmp`
+- [x] Add `REWRITE_TMP_FILE` constant for both profiles (`.memex-rewrite.tmp`
       for LFN builds, `MXRWRT.TMP` for FAT builds).
-- [ ] Replace the string literal `".memex-rewrite.tmp"` at `memex.c:2642`
+- [x] Replace the string literal `".memex-rewrite.tmp"` at `memex.c:2642`
       with `REWRITE_TMP_FILE`.
-- [ ] Confirm no other long special file names are hardcoded in `memex.c`
+- [x] Confirm no other long special file names are hardcoded in `memex.c`
       (search for `\.memex`, `\.trash`, `\.templates`).
 
 ## Phase 4: 8.3 Note Filename Sanitization

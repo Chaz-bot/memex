@@ -2649,7 +2649,7 @@ static int rewrite_file_links(const char *file_name, const char *old_title,
     int changed = 0;
 
     make_path(path, sizeof(path), file_name);
-    make_special_path(temp_path, sizeof(temp_path), ".memex-rewrite.tmp");
+    make_special_path(temp_path, sizeof(temp_path), REWRITE_TMP_FILE);
 
     in = fopen(path, "r");
     if (!in)

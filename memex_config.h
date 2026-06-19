@@ -78,14 +78,25 @@
 
 #endif
 
-#define STATE_FILE ".memex-state"
-#define CONFIG_FILE ".memexrc"
+#ifdef MEMEX_DOS_FAT
+#define STATE_FILE        "MXSTATE.DAT"
+#define CONFIG_FILE       "MEMEXRC.CFG"
+#define SAVED_SEARCH_FILE "MXSRCH.DAT"
+#define DAILY_FORMAT_FILE "MXDAYFMT.DAT"
+#define TRASH_DIR         "TRASH"
+#define TEMPLATE_DIR      "TEMPLATE"
+#define REWRITE_TMP_FILE  "MXRWRT.TMP"
+#else
+#define STATE_FILE        ".memex-state"
+#define CONFIG_FILE       ".memexrc"
 #define SAVED_SEARCH_FILE ".memex-searches"
-#define TRASH_DIR ".trash"
-#define TEMPLATE_DIR ".templates"
-#define DEFAULT_TEMPLATE "default.md"
-#define DAILY_TEMPLATE "daily.md"
 #define DAILY_FORMAT_FILE ".memex-daily-format"
+#define TRASH_DIR         ".trash"
+#define TEMPLATE_DIR      ".templates"
+#define REWRITE_TMP_FILE  ".memex-rewrite.tmp"
+#endif
+#define DEFAULT_TEMPLATE "default.md"
+#define DAILY_TEMPLATE   "daily.md"
 
 #ifdef MEMEX_DISABLE_SAVED_SEARCHES
 #define MEMEX_ENABLE_SAVED_SEARCHES 0
