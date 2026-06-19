@@ -16,6 +16,9 @@ all: $(EXE)
 $(EXE): memex.c memex_config.h platform.h platform_dos.c ui_curses.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(EXE) memex.c platform_dos.c $(LIBS)
 
+fat: memex.c memex_config.h platform.h platform_dos.c ui_curses.h
+	$(CC) $(CFLAGS) -DMEMEX_DOS_FAT $(LDFLAGS) -o $(EXE) memex.c platform_dos.c $(LIBS)
+
 check-syntax: memex.c memex_config.h platform.h platform_dos.c ui_curses.h
 	$(CC) $(CFLAGS) -c memex.c
 	$(CC) $(CFLAGS) -c platform_dos.c
@@ -33,4 +36,4 @@ clean:
 	if exist memex.o del memex.o
 	if exist platform_dos.o del platform_dos.o
 
-.PHONY: all check-syntax check-triage check-fat clean
+.PHONY: all fat check-syntax check-triage check-fat clean

@@ -163,12 +163,13 @@ illegal in 8.3. Under `MEMEX_DOS_FAT`, update the test scaffolding:
 
 ## Phase 8: Build System
 
-- [ ] Add `fat` target to `Makefile.dj` that builds `memex.exe` with both
+- [x] Add `fat` target to `Makefile.dj` that builds `memex.exe` with both
       `-DMEMEX_DOS_PROFILE` and `-DMEMEX_DOS_FAT`.
-- [ ] Add `check-fat` target (compile without link, as with `check-syntax`).
-- [ ] Confirm `make -f Makefile.dj check-fat` passes on the Linux host with
+- [x] Add `check-fat` target (compile without link, as with `check-syntax`).
+      (Already added in Phase 2; confirmed present and passing.)
+- [x] Confirm `make -f Makefile.dj check-fat` passes on the Linux host with
       the DJGPP cross compiler and PDCursesMod headers.
-- [ ] Record exact compiler, PDCurses, and DOS runtime versions used for the
+- [x] Record exact compiler, PDCurses, and DOS runtime versions used for the
       FAT build in `DOS_BUILD.md`.
 
 ## Phase 9: Runtime Verification On DOS 6.22

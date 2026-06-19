@@ -292,3 +292,52 @@ and exits without running `memex.exe`.
 
 `CWSDPMI.EXE` is not needed under DOSBox-X (built-in DPMI) or FreeDOS with
 `HDPMI32.EXE` or another DPMI server already loaded.
+
+## FAT Build for MS-DOS 6.22 (`MEMEX_DOS_FAT`)
+
+`MEMEX_DOS_FAT` extends `MEMEX_DOS_PROFILE` for bare MS-DOS 6.22 FAT16
+filesystems without a long filename driver. It replaces all config, state,
+and note filenames with 8.3-safe equivalents.
+
+Use the `fat` target:
+
+```sh
+make -f Makefile.dj fat \
+  CC=i686-pc-msdosdjgpp-gcc \
+  LIBS="/path/to/PDCursesMod/dos/pdcurses.a" \
+  CFLAGS="-O2 -Wall -march=i386 -DMEMEX_DOS_PROFILE -DMEMEX_DISABLE_MOUSE -I/path/to/PDCursesMod"
+```
+
+The `fat` target appends `-DMEMEX_DOS_FAT` to `CFLAGS` automatically. The
+compiler, PDCurses library, C runtime, and all other build flags are identical
+to the standard DOS build documented above (GCC 14.2.0, DJGPP 2.05,
+PDCursesMod DOS backend, `djgpp-djcrx-bootstrap 2.05-5`).
+
+The `check-fat` target verifies compilation without linking — useful on Linux
+hosts that do not have the DOS PDCurses library installed:
+
+```sh
+make -f Makefile.dj check-fat
+```
+
+This passes on the Linux host with the DJGPP cross compiler and PDCursesMod
+headers.
+
+### Filename mapping under `MEMEX_DOS_FAT`
+
+| Purpose | Standard (LFN) name | 8.3 name |
+|---|---|---|
+| State | `.memex-state` | `MXSTATE.DAT` |
+| Config | `.memexrc` | `MEMEXRC.CFG` |
+| Saved searches | `.memex-searches` | `MXSRCH.DAT` |
+| Daily format | `.memex-daily-format` | `MXDAYFMT.DAT` |
+| Trash directory | `.trash` | `TRASH` |
+| Template directory | `.templates` | `TEMPLATE` |
+| Rewrite scratch | `.memex-rewrite.tmp` | `MXRWRT.TMP` |
+
+Note files use a sanitized title stem (≤ 8 chars, `.MD` extension). If two
+titles produce the same 8-char stem, `~1` through `~9` suffixes are tried
+(Windows-style short name collision). The full user title is written as a
+`# Heading` in each note file and restored as `display_title` on load, so
+link resolution and search operate on the full title regardless of what the
+filename looks like on disk.
